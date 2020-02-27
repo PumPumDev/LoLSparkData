@@ -24,7 +24,7 @@ object ClientAPI {
     implicit val system: ActorSystem = ActorSystem()
     implicit val materializer: ActorMaterializer = ActorMaterializer()
     implicit val executionContext: ExecutionContextExecutor = system.dispatcher
-    val key: String = "RGAPI-05bcbe94-655b-48b8-9363-59073fc7220d"
+    val key: String = "****************"
     val uriProtocol: String = "https://"
     val riotUri: String = ".api.riotgames.com/lol/league/v4/challengerleagues/by-queue/RANKED_SOLO_5x5"
     val riotToken: (String, String) = ("X-Riot-Token", key)
