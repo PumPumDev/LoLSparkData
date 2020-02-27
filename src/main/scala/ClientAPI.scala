@@ -1,65 +1,60 @@
-import java.util.concurrent.Executors
+import java.io.PrintWriter
 
 import akka.actor.ActorSystem
-import akka.http.scaladsl.Http
-import akka.http.scaladsl.model.{HttpMethods, HttpRequest, HttpResponse, headers}
+import akka.http.scaladsl.{Http, model}
+import akka.http.scaladsl.model.{DateTime, HttpRequest, HttpResponse, headers}
 import akka.http.scaladsl.unmarshalling.Unmarshal
-import akka.stream.ActorMaterializer
-import dto.{LeagueItemDTO, LeagueListDTO, MiniSeriesDTO, SummonerDTO}
-import spray.json.DefaultJsonProtocol._
-import akka.http.scaladsl.marshallers.sprayjson.SprayJsonSupport._
-import spray.json.RootJsonFormat
-
-import scala.concurrent.{Await, ExecutionContext, ExecutionContextExecutor, Future}
-import scala.util.{Failure, Success}
+import akka.stream.Materializer
+import com.typesafe.config.{Config, ConfigFactory}
+import dto.LeagueListDTO
+import json.protocol.JsonDtoProtocol
 import usefull.UsefulItems.regions
 
-import scala.concurrent.duration._
-import scala.concurrent.ExecutionContext.Implicits.global
+import scala.concurrent.duration.Duration
+import scala.concurrent.{Await, ExecutionContextExecutor, Future}
+import scala.reflect.io
+import scala.util.Success
 
-object ClientAPI {
+
+object ClientAPI extends JsonDtoProtocol {
 
   def main(args: Array[String]): Unit = {
-    val dataSet: List[LeagueListDTO] = List()
+    //Initialization
     implicit val system: ActorSystem = ActorSystem()
-    implicit val materializer: ActorMaterializer = ActorMaterializer()
+    implicit val materializer: Materializer = Materializer(system)
     implicit val executionContext: ExecutionContextExecutor = system.dispatcher
-    val key: String = "****************"
+    val config: Config = ConfigFactory.load("credentials.properties")
+
+    //Pueden aumentarse el número de parámetros que se dejan para la configuracion
     val uriProtocol: String = "https://"
     val riotUri: String = ".api.riotgames.com/lol/league/v4/challengerleagues/by-queue/RANKED_SOLO_5x5"
-    val riotToken: (String, String) = ("X-Riot-Token", key)
-    /*val responseFuture : Future[HttpResponse] = Http().singleRequest(HttpRequest(
-      uri = ".api.riotgames.com/lol/league/v4/challengerleagues/by-queue/RANKED_SOLO_5x5")
-      .withHeaders(headers.RawHeader("X-Riot-Token",key)))*/
+    val riotToken: (String, String) = (config.getString("riotToken"), config.getString("apiKey"))
 
-    implicit val summonerProtocol: RootJsonFormat[SummonerDTO] = jsonFormat7(SummonerDTO)
-    implicit val miniSeriesDTO: RootJsonFormat[MiniSeriesDTO] = jsonFormat4(MiniSeriesDTO)
-    implicit val leagueItemDTO: RootJsonFormat[LeagueItemDTO] = jsonFormat10(LeagueItemDTO)
-    implicit val leagueListDTO: RootJsonFormat[LeagueListDTO] = jsonFormat5(LeagueListDTO)
+    /*
+    Este método nos da los primeros datos con los que trabajaremos is bien no aprovecha las posibilidades de la concurrencia
+    de peticiones HTTP lo elegimos porque sigue un paradigma más funcional
+     */
+    val dataSet: List[LeagueListDTO] = regions().map(reg => {
+      Await.result(Unmarshal[HttpResponse](Await.result(Http().singleRequest(HttpRequest(uri = uriProtocol + reg + riotUri)
+        .withHeaders(headers.RawHeader(riotToken._1, riotToken._2))): Future[HttpResponse], Duration.Inf): HttpResponse)
+        .to[LeagueListDTO], Duration.Inf): LeagueListDTO //Da un warning por la fecha, al parecer nos devuelven la fecha con un format distinto
+    })
 
-    /*responseFuture
-      .onComplete{
-        case Success(value) => print(Unmarshal(value).to[SummonerDTO])
-        case Failure(e: Throwable) => sys.error(e.toString)
-      }*/
-
-    /*Http().singleRequest(HttpRequest(uri = uriProtocol + regions().head + riotUri)
-      .withHeaders(headers.RawHeader(riotToken._1, riotToken._2)))
-      .onComplete{
-        case Success(value) => println(Unmarshal(value).to[LeagueListDTO])
-        case _ => println("Al carrer")
-      }*/
-
-    regions().foreach {
-      reg =>
-        Http().singleRequest(HttpRequest(uri = uriProtocol + reg + riotUri)
-          .withHeaders(headers.RawHeader(riotToken._1, riotToken._2)))
-          .onComplete {
-            case Success(value) => {
-              println(Unmarshal(value).to[LeagueListDTO])
-            }
-            case _ => println("Fucked")
-          }
+    //Volcamos los datos a un fichero
+    val file = io.File(config.getString("outputPath"))
+    if (file.exists) {
+      file.delete()
+      println("File was overwritten")
     }
+    val writer = new PrintWriter(new java.io.File(file.name))
+
+    writer.write(dataSet.toString())
+    writer.close()
+
+    //Obtenemos un "harmless" error al cerrar el cliente TODO Arreglarlo
+    Await.result(system.terminate(), Duration.Inf)
+    //Await.result(Http().shutdownAllConnectionPools(),Duration.Inf)
   }
+
 }
+

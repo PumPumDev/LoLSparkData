@@ -1,5 +1,3 @@
-import org.apache.log4j.{Level, LogManager, Logger}
-
 import org.apache.spark.sql.SparkSession
 
 
