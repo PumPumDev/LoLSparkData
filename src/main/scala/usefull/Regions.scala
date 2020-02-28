@@ -1,5 +1,7 @@
 package usefull
 
+import spray.json.{DefaultJsonProtocol, JsString, JsValue, RootJsonFormat}
+
 object Regions extends Enumeration {
   type Region = Value
 
@@ -16,4 +18,12 @@ object Regions extends Enumeration {
   val LA2: Regions.Value = Value("la2")
 
   def getAllRegions: Set[String] = Regions.values.map(_.toString)
+
+  implicit object RegionFormat extends RootJsonFormat[Region] with DefaultJsonProtocol {
+    override def write(obj: Region): JsValue = JsString(obj.toString)
+
+    override def read(json: JsValue): Region = json match {
+      case JsString(value) => Value(value)
+    }
+  }
 }
