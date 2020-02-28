@@ -26,19 +26,21 @@ object ClientAPI extends JsonDtoProtocol {
     val config: Config = ConfigFactory.load("credentials.properties")
 
     //Pueden aumentarse el número de parámetros que se dejan para la configuracion
+    //TODO: Llevarme las Uris a Utilities
     val uriProtocol: String = "https://"
-    val riotUri: String = ".api.riotgames.com/lol/league/v4/challengerleagues/by-queue/RANKED_SOLO_5x5"
+    val riotChallengerUri: String = ".api.riotgames.com/lol/league/v4/challengerleagues/by-queue/RANKED_SOLO_5x5"
+    val riotSummonerUri: String = ".api.riotgames.com/lol/summoner/v4/summoners/"
     val riotToken: (String, String) = (config.getString("riotToken"), config.getString("apiKey"))
 
     /*
     Este método nos da los primeros datos con los que trabajaremos is bien no aprovecha las posibilidades de la concurrencia
     de peticiones HTTP lo elegimos porque sigue un paradigma más funcional
      */
-    val dataSet: List[LeagueListDTO] = regions().map(reg => {
-      Await.result(Unmarshal[HttpResponse](Await.result(Http().singleRequest(HttpRequest(uri = uriProtocol + reg + riotUri)
+    val dataSet: Map[String, LeagueListDTO] = regions().map(reg => {
+      (reg, Await.result(Unmarshal[HttpResponse](Await.result(Http().singleRequest(HttpRequest(uri = uriProtocol + reg + riotChallengerUri)
         .withHeaders(headers.RawHeader(riotToken._1, riotToken._2))): Future[HttpResponse], Duration.Inf): HttpResponse)
-        .to[LeagueListDTO], Duration.Inf): LeagueListDTO //Da un warning por la fecha, al parecer nos devuelven la fecha con un format distinto
-    })
+        .to[LeagueListDTO], Duration.Inf): LeagueListDTO) //Da un warning por la fecha, al parecer nos devuelven la fecha con un format distinto
+    }).toMap[String, LeagueListDTO]
 
     //Volcamos los datos a un fichero
     val file = io.File(config.getString("outputPath"))
