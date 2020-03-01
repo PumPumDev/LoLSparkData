@@ -1,3 +1,4 @@
+import dto.`match`.MatchlistDto
 import dto.player.{LeagueListDTO, SummonerDTO}
 import json.protocol.JsonCustomProtocol
 import service.Services._
@@ -24,6 +25,8 @@ object ClientAPI extends JsonCustomProtocol with DefaultJsonProtocol {
     La solución será reducir el tamaño de la muestra a estudiar
      */
     val challengerSummonerDS: Map[Region, List[SummonerDTO]] = getChallengerSummoners(challengerPlayerDS)
+
+    val challengerMatchlistDS: Map[Region, List[(SummonerDTO, MatchlistDto)]] = getChallengerMatchlist(challengerSummonerDS)
 
 
     /*
