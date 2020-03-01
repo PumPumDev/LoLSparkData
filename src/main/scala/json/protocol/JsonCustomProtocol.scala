@@ -5,7 +5,7 @@ import dto.`match`.{MatchDto, MatchReferenceDto, MatchlistDto}
 import dto.player.{LeagueItemDTO, LeagueListDTO, MiniSeriesDTO, SummonerDTO}
 import spray.json.{DefaultJsonProtocol, NullOptions, RootJsonFormat}
 
-trait JsonDtoProtocol extends SprayJsonSupport with DefaultJsonProtocol with NullOptions {
+trait JsonCustomProtocol extends SprayJsonSupport with DefaultJsonProtocol with NullOptions {
   implicit val summonerDto: RootJsonFormat[SummonerDTO] = jsonFormat7(SummonerDTO)
   implicit val miniSeriesDTO: RootJsonFormat[MiniSeriesDTO] = jsonFormat4(MiniSeriesDTO)
   implicit val leagueItemDTO: RootJsonFormat[LeagueItemDTO] = jsonFormat10(LeagueItemDTO)

@@ -26,4 +26,5 @@ object Regions extends Enumeration {
       case JsString(value) => Value(value)
     }
   }
+
 }
