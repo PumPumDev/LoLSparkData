@@ -3,7 +3,7 @@ package service
 import akka.http.scaladsl.Http
 import akka.http.scaladsl.model.{HttpRequest, HttpResponse, headers}
 import akka.http.scaladsl.unmarshalling.Unmarshal
-import dto.`match`.MatchlistDto
+import dto.`match`.{MatchDto, MatchReferenceDto, MatchlistDto}
 import dto.player.{LeagueListDTO, SummonerDTO}
 import usefull.FilesManagement._
 import usefull.LoadObject._
@@ -54,7 +54,7 @@ object Services {
                   .to[SummonerDTO], Duration.Inf)
               case value if value.status.isSuccess() => Await.result(
                 Unmarshal[HttpResponse](value)
-                .to[SummonerDTO], Duration.Inf)
+                  .to[SummonerDTO], Duration.Inf)
               case _ => throw new RuntimeException("Server Error")
             }
           }): List[SummonerDTO])))(value)
@@ -78,24 +78,32 @@ object Services {
               Await.result(Http().singleRequest(httpRequest), Duration.Inf) match {
                 case httpResponse: HttpResponse if httpResponse.status.intValue() == maxRequestRateAchieve =>
                   println(httpResponse)
-
-                  Await.result(Unmarshal[HttpResponse](retryRequest(httpResponse)(httpRequest))
-                    .to[MatchlistDto], Duration.Inf)
+                  retryRequest(httpResponse)(httpRequest) match {
+                    case retryResponse: HttpResponse if retryResponse.status.isSuccess() =>
+                      Await.result(Unmarshal[HttpResponse](retryResponse)
+                        .to[MatchlistDto], Duration.Inf)
+                    case retryResponse =>
+                      retryResponse.discardEntityBytes()
+                      System.err.println("Server retry was failed")
+                      println(retryResponse)
+                      MatchlistDto(List(), 0, 0, 0) //Default instance if it fails
+                  }
 
                 case httpResponse: HttpResponse if httpResponse.status.isSuccess() =>
 
                   Await.result(Unmarshal[HttpResponse](httpResponse).to[MatchlistDto], Duration.Inf)
 
                 case e =>
+                  e.discardEntityBytes()
                   println(e)
-                  sys.error("Server responses was failed")
+                  System.err.println("Server responses was failed")
                   MatchlistDto(List(), 0, 0, 0) //Default instance if it fails
               }
             })))
         })(file)
     }
 
-  /*def getChallengerMatches(matchesLists: Map[Region, List[(SummonerDTO,MatchlistDto)]]): Map[Region, List[MatchDto]] =
+  def getChallengerMatches(matchesLists: Map[Region, List[(SummonerDTO, MatchlistDto)]]): Map[Region, List[MatchDto]] =
     challengerMatchesFile match {
       case file if file.exists() =>
         println("Loading data from local JSON file")
@@ -106,20 +114,53 @@ object Services {
         println("Estimated time to get the data from the API (with a Personal API key): +40 min")
 
         saveDataAsJson[Map[Region, List[MatchDto]]](
-          matchesLists.map{
-            case (region, list) => (region, list.map{
-              case (_, dto) => dto
-            }.toSet)
+          matchesLists.map {
+            case (region, list) => (region, list.flatMap {
+              case (_, dto) => dto.matches
+            }.distinct.take(400).map((reference: MatchReferenceDto) => {
+              val httpRequest: HttpRequest = HttpRequest(uri = uriProtocol + region + riotMatchUri + reference.gameId)
+                .withHeaders(headers.RawHeader(riotToken._1, riotToken._2))
+
+              Await.result(Http().singleRequest(httpRequest), Duration.Inf) match {
+                case httpResponse: HttpResponse if httpResponse.status.intValue() == maxRequestRateAchieve =>
+                  println(httpResponse)
+                  retryRequest(httpResponse)(httpRequest) match {
+                    case retryResponse: HttpResponse if retryResponse.status.isSuccess() =>
+                      Await.result(Unmarshal[HttpResponse](retryResponse)
+                        .to[MatchDto], Duration.Inf)
+
+                    case retryResponse =>
+                      retryResponse.discardEntityBytes()
+                      System.err.println("Server retry was failed")
+                      println(retryResponse)
+                      MatchDto(0, 0, 0, List(), "", "", "", 0, "", List(), List(), 0, 0) //Default instance if it fails
+                  }
+
+
+                case httpResponse: HttpResponse if httpResponse.status.isSuccess() =>
+                  Await.result(Unmarshal[HttpResponse](httpResponse).to[MatchDto], Duration.Inf)
+
+
+                case e =>
+                  e.discardEntityBytes()
+                  println(e)
+                  System.err.println("Server responses was failed")
+                  MatchDto(0, 0, 0, List(), "", "", "", 0, "", List(), List(), 0, 0) //Default instance if it fails
+              }
+            }))
           }
         )(file)
-    }*/
+    }
 
   private def retryRequest(httpResponse: HttpResponse)(httpRequest: HttpRequest): HttpResponse = {
     val timeToWait: Int = httpResponse.headers.filter(header => header.is("retry-after"))
-      .map(header => header.value().toInt).head
+      .map(header => header.value().toInt) match {
+      case list if list.nonEmpty => list.head
+      case _ => 105
+    }
+    httpResponse.discardEntityBytes() //We have to process response even when it has no data
     println("Max Rate Achieve. We are waiting " + timeToWait + " seconds to continue")
-    Thread.sleep(timeToWait * 1000) //We convert it into milliseconds
+    Thread.sleep(timeToWait * 1000 + 50) //We convert it into milliseconds
     Await.result(Http().singleRequest(httpRequest), Duration.Inf)
   }
-
 }
