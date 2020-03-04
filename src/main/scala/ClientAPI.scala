@@ -19,8 +19,7 @@ object ClientAPI extends JsonCustomProtocol with DefaultJsonProtocol {
     /*
     Muchas llamadas a la API sería mejor una estrategia concurrente
 
-    Gran problema con el volumen de llamadas a la API
-    La solución será reducir el tamaño de la muestra a estudiar
+    Gran problema con el volumen de llamadas a la API = Mucho tiempo en la recopilación de datos
      */
     val challengerSummonerDS: Map[Region, List[SummonerDTO]] = getChallengerSummoners(challengerPlayerDS)
 
