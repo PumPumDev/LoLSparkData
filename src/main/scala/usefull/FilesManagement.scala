@@ -21,7 +21,7 @@ object FilesManagement extends JsonCustomProtocol {
     new File(config.getString("outputPath") + "challengerMatchlist.json")
 
   val challengerMatchesFile: File =
-    new File(config.getString("outputPath") + "challenger400Matches.json")
+    new File(config.getString("outputPath") + "challenger1000Matches.json")
 
   /**
    *
