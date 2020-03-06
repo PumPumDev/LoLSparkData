@@ -1,5 +1,7 @@
 # SparkLoLData
+
 ## Final Informatic Degree Project
+
 This is a Spark project which uses League of Legends (LoL) data to explore Spark framework and maybe to get some conclusions about League of Legends game.
 
 We will take LoL data from their public [Riot Api](https://developer.riotgames.com/apis).
@@ -10,7 +12,7 @@ Open the file on a text editor.
 
 You have to open the template and set your _Riot API Key_ to `apiKey` property.
 
-You can add more properties and use them in the App calling the object `config.getString("YourProperty"")`, but be 
+You can add more properties and use them in the App calling the object `config.getString("YourProperty"")`, but be
 careful changing the default properties can crash the hole App!!
 
 When you finished, save the file and change the extension to `.properties`.
