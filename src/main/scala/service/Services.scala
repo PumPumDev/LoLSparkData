@@ -1,12 +1,14 @@
 package service
 
+import akka.actor.ActorSystem
 import akka.http.scaladsl.Http
 import akka.http.scaladsl.model.{HttpRequest, HttpResponse, headers}
 import akka.http.scaladsl.unmarshalling.Unmarshal
+import com.typesafe.scalalogging.Logger
 import dto.`match`.{MatchDto, MatchReferenceDto, MatchlistDto}
 import dto.player.{LeagueListDTO, SummonerDTO}
 import usefull.FilesManagement._
-import usefull.LoadObject._
+//import usefull.LoadObject._
 import usefull.Regions
 import usefull.Regions.Region
 import usefull.Uris._
@@ -18,10 +20,15 @@ import scala.concurrent.{Await, Future}
 object Services {
   private val maxRequestRateAchieve = 429
 
-  def getChallengerPlayers: Map[Region, LeagueListDTO] =
-    challengerPlayersFile match {
+  private val logger = Logger("Service")
+
+  //TODO: Cambiar a Option[T] en lugar de crear instancias por defecto
+
+  def getChallengerPlayers(pathFile: String)
+                          (implicit actorSystem: ActorSystem): Map[Region, LeagueListDTO] =
+    getFile(pathFile) match {
       case value if value.exists() =>
-        println("Loading data from local JSON file")
+        logger.info("Loading data from local JSON file")
 
         loadJsonData[Map[Region, LeagueListDTO]](value) //Importante pasarle el tipo para que sepa cómo serializar
       case value =>
@@ -32,13 +39,14 @@ object Services {
         }).toMap[Region, LeagueListDTO])(value)
     }
 
-  def getChallengerSummoners(players: Map[Region, LeagueListDTO]): Map[Region, List[SummonerDTO]] =
-    challengerSummonersFile match {
+  def getChallengerSummoners(pathFile: String, players: Map[Region, LeagueListDTO])
+                            (implicit actorSystem: ActorSystem): Map[Region, List[SummonerDTO]] =
+    getFile(pathFile) match {
       case value if value.exists() =>
-        println("Loading data from local JSON file")
+        logger.info("Loading data from local JSON file")
         loadJsonData[Map[Region, List[SummonerDTO]]](value)
       case value =>
-        println("Estimated time to get the data from the API (with a Personal API key): 20 min")
+        logger.info("Estimated time to get the data from the API (with a Personal API key): 20 min")
 
         saveDataAsJson[Map[Region, List[SummonerDTO]]](players.map(mapEntry =>
           (mapEntry._1, mapEntry._2.entries.map(item => {
@@ -55,20 +63,38 @@ object Services {
               case value if value.status.isSuccess() => Await.result(
                 Unmarshal[HttpResponse](value)
                   .to[SummonerDTO], Duration.Inf)
-              case _ => throw new RuntimeException("Server Error")
+              case e =>
+                e.discardEntityBytes()
+                logger.error(e.toString())
+                logger.error("Server responses was failed")
+                SummonerDTO(0, "", "", 0, 0, "", "") //Default instance if it fails
             }
           }): List[SummonerDTO])))(value)
     }
 
-  def getChallengerMatchlist(summoners: Map[Region, List[SummonerDTO]]): Map[Region, List[(SummonerDTO, MatchlistDto)]] =
-    challengerMatchlistFile match {
+  private def retryRequest(httpResponse: HttpResponse)(httpRequest: HttpRequest)
+                          (implicit actorSystem: ActorSystem): HttpResponse = {
+    val timeToWait: Int = httpResponse.headers.filter(header => header.is("retry-after"))
+      .map(header => header.value().toInt) match {
+      case list if list.nonEmpty => list.head
+      case _ => 105
+    }
+    httpResponse.discardEntityBytes() //We have to process response even when it has no data
+    logger.info("Max Rate Achieve. We are waiting " + timeToWait + " seconds to continue")
+    Thread.sleep(timeToWait * 1000 + 50) //We convert it into milliseconds
+    Await.result(Http().singleRequest(httpRequest), Duration.Inf)
+  }
+
+  def getChallengerMatchlist(pathFile: String, summoners: Map[Region, List[SummonerDTO]])
+                            (implicit actorSystem: ActorSystem): Map[Region, List[(SummonerDTO, MatchlistDto)]] =
+    getFile(pathFile) match {
       case value if value.exists() =>
-        println("Loading data from local JSON file")
+        logger.info("Loading data from local JSON file")
 
         loadJsonData[Map[Region, List[(SummonerDTO, MatchlistDto)]]](value)
 
       case file =>
-        println("Estimated time to get the data from the API (with a Personal API key): 30 min")
+        logger.info("Estimated time to get the data from the API (with a Personal API key): 30 min")
         saveDataAsJson[Map[Region, List[(SummonerDTO, MatchlistDto)]]](summoners.map {
           case (region, os) =>
             (region, os.map(value => (value, {
@@ -77,15 +103,15 @@ object Services {
 
               Await.result(Http().singleRequest(httpRequest), Duration.Inf) match {
                 case httpResponse: HttpResponse if httpResponse.status.intValue() == maxRequestRateAchieve =>
-                  println(httpResponse)
+                  logger.info(httpResponse.toString())
                   retryRequest(httpResponse)(httpRequest) match {
                     case retryResponse: HttpResponse if retryResponse.status.isSuccess() =>
                       Await.result(Unmarshal[HttpResponse](retryResponse)
                         .to[MatchlistDto], Duration.Inf)
                     case retryResponse =>
                       retryResponse.discardEntityBytes()
-                      System.err.println("Server retry was failed")
-                      println(retryResponse)
+                      logger.error("Server retry was failed")
+                      logger.error(retryResponse.toString())
                       MatchlistDto(List(), 0, 0, 0) //Default instance if it fails
                   }
 
@@ -95,23 +121,24 @@ object Services {
 
                 case e =>
                   e.discardEntityBytes()
-                  println(e)
-                  System.err.println("Server responses was failed")
+                  logger.error(e.toString())
+                  logger.error("Server responses was failed")
                   MatchlistDto(List(), 0, 0, 0) //Default instance if it fails
               }
             })))
         })(file)
     }
 
-  def getChallengerMatches(matchesLists: Map[Region, List[(SummonerDTO, MatchlistDto)]]): Map[Region, List[MatchDto]] =
-    challengerMatchesFile match {
+  def getChallengerMatches(pathFile: String, matchesLists: Map[Region, List[(SummonerDTO, MatchlistDto)]])
+                          (implicit actorSystem: ActorSystem): Map[Region, List[MatchDto]] =
+    getFile(pathFile) match {
       case file if file.exists() =>
-        println("Loading data from local JSON file")
+        logger.info("Loading data from local JSON file")
 
         loadJsonData[Map[Region, List[MatchDto]]](file)
 
       case file =>
-        println("Estimated time to get the data from the API (with a Personal API key): +40 min")
+        logger.info("Estimated time to get the data from the API (with a Personal API key): +40 min")
 
         saveDataAsJson[Map[Region, List[MatchDto]]](
           matchesLists.map {
@@ -123,7 +150,7 @@ object Services {
 
               Await.result(Http().singleRequest(httpRequest), Duration.Inf) match {
                 case httpResponse: HttpResponse if httpResponse.status.intValue() == maxRequestRateAchieve =>
-                  println(httpResponse)
+                  logger.info(httpResponse.toString())
                   retryRequest(httpResponse)(httpRequest) match {
                     case retryResponse: HttpResponse if retryResponse.status.isSuccess() =>
                       Await.result(Unmarshal[HttpResponse](retryResponse)
@@ -131,8 +158,8 @@ object Services {
 
                     case retryResponse =>
                       retryResponse.discardEntityBytes()
-                      System.err.println("Server retry was failed")
-                      println(retryResponse)
+                      logger.error("Server retry was failed")
+                      logger.error(retryResponse.toString())
                       MatchDto(0, 0, 0, List(), "", "", "", 0, "", List(), List(), 0, 0) //Default instance if it fails
                   }
 
@@ -143,24 +170,12 @@ object Services {
 
                 case e =>
                   e.discardEntityBytes()
-                  println(e)
-                  System.err.println("Server responses was failed")
+                  logger.error(e.toString())
+                  logger.error("Server responses was failed")
                   MatchDto(0, 0, 0, List(), "", "", "", 0, "", List(), List(), 0, 0) //Default instance if it fails
               }
             }))
           }
         )(file)
     }
-
-  private def retryRequest(httpResponse: HttpResponse)(httpRequest: HttpRequest): HttpResponse = {
-    val timeToWait: Int = httpResponse.headers.filter(header => header.is("retry-after"))
-      .map(header => header.value().toInt) match {
-      case list if list.nonEmpty => list.head
-      case _ => 105
-    }
-    httpResponse.discardEntityBytes() //We have to process response even when it has no data
-    println("Max Rate Achieve. We are waiting " + timeToWait + " seconds to continue")
-    Thread.sleep(timeToWait * 1000 + 50) //We convert it into milliseconds
-    Await.result(Http().singleRequest(httpRequest), Duration.Inf)
-  }
 }

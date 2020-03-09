@@ -12,7 +12,10 @@ import scala.io.Source
 Elegimos reducir a este archivo el manejo de ficheros que emplea Java y una programación menos funcional
  */
 object FilesManagement extends JsonCustomProtocol {
+
   val standardEncoding: String = config.getString("encoding")
+
+  /*
   val challengerPlayersFile: File =
     new File(config.getString("outputPath") + "challengerPlayers.json")
   val challengerSummonersFile: File =
@@ -22,6 +25,10 @@ object FilesManagement extends JsonCustomProtocol {
 
   val challengerMatchesFile: File =
     new File(config.getString("outputPath") + "challenger1000Matches.json")
+  */
+
+  def getFile(path: String): File =
+    new File(path)
 
   /**
    *

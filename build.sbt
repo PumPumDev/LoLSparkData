@@ -27,3 +27,6 @@ libraryDependencies += "com.typesafe.akka" %% "akka-actor" % "2.6.3"
 //Load properties
 libraryDependencies += "com.typesafe" % "config" % "1.4.0"
 
+//Manage Log
+libraryDependencies += "com.typesafe.scala-logging" %% "scala-logging" % "3.9.2"
+
