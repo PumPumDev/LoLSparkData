@@ -4,7 +4,6 @@ import java.io.{File, PrintWriter}
 
 import json.protocol.JsonCustomProtocol
 import spray.json._
-import usefull.LoadObject.config
 
 import scala.io.Source
 
@@ -13,7 +12,6 @@ Elegimos reducir a este archivo el manejo de ficheros que emplea Java y una prog
  */
 object FilesManagement extends JsonCustomProtocol {
 
-  val standardEncoding: String = config.getString("encoding")
 
   /*
   val challengerPlayersFile: File =
@@ -38,7 +36,7 @@ object FilesManagement extends JsonCustomProtocol {
    * @return Data loaded as an object
    */
   def loadJsonData[T](file: File)(implicit reader: JsonReader[T]): T = {
-    val sourceFile = Source.fromFile(file)(standardEncoding)
+    val sourceFile = Source.fromFile(file)
     val jsonData = sourceFile.mkString.parseJson
     sourceFile.close()
     jsonData.convertTo[T]

@@ -1,4 +1,5 @@
 import akka.actor.ActorSystem
+import akka.http.scaladsl.model.headers.RawHeader
 import akka.stream.Materializer
 import com.typesafe.config.{Config, ConfigFactory}
 import dto.`match`.{MatchDto, MatchlistDto}
@@ -6,7 +7,7 @@ import dto.player.{LeagueListDTO, SummonerDTO}
 import json.protocol.JsonCustomProtocol
 import service.Services._
 import spray.json._
-import usefull.Regions.Region
+import usefull.Region
 
 import scala.concurrent.duration.Duration
 import scala.concurrent.{Await, ExecutionContextExecutor}
@@ -27,6 +28,9 @@ object ClientAPI extends JsonCustomProtocol with DefaultJsonProtocol with App {
   val challengerMatchlistPath: String = outputPath + "challengerMatchlist.json"
   val challengerMatchesPath: String = outputPath + "challenger1000Matches.json"
 
+  //API Request Headers
+  implicit val rawHeader = RawHeader(config.getString("riotToken"), config.getString("apiKey"))
+
 
   val challengerPlayerDS: Map[Region, LeagueListDTO] = getChallengerPlayers(challengerPlayersPath)
 
@@ -41,9 +45,21 @@ object ClientAPI extends JsonCustomProtocol with DefaultJsonProtocol with App {
   val challengerMatchlistDS: Map[Region, List[(SummonerDTO, MatchlistDto)]] =
     getChallengerMatchlist(challengerMatchlistPath, challengerSummonerDS)
 
-  val challengerMatches: Map[Region, List[MatchDto]] =
+  val challengerMatchesDS: Map[Region, List[MatchDto]] =
     getChallengerMatches(challengerMatchesPath, challengerMatchlistDS)
 
+  //We start the Queries
+  /*
+  Function to measure the time executing a function f
+   */
+  def execTime[T](f: => T): (T, Long) = {
+    val start = System.nanoTime()
+    val res = f
+    (res, System.nanoTime() - start)
+  }
+
+
+  println("END")
   //Obtenemos un "harmless" error al cerrar el cliente TODO Arreglarlo
   //fixme: Parece que al añadir los loggers ya no cierra el cliente al terminar de procesar
   Await.result(system.terminate(), Duration.Inf)

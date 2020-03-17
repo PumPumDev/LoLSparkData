@@ -2,15 +2,14 @@ package service
 
 import akka.actor.ActorSystem
 import akka.http.scaladsl.Http
-import akka.http.scaladsl.model.{HttpRequest, HttpResponse, headers}
+import akka.http.scaladsl.model.headers.RawHeader
+import akka.http.scaladsl.model.{HttpRequest, HttpResponse}
 import akka.http.scaladsl.unmarshalling.Unmarshal
 import com.typesafe.scalalogging.Logger
 import dto.`match`.{MatchDto, MatchReferenceDto, MatchlistDto}
 import dto.player.{LeagueListDTO, SummonerDTO}
 import usefull.FilesManagement._
-//import usefull.LoadObject._
-import usefull.Regions
-import usefull.Regions.Region
+import usefull.Region
 import usefull.Uris._
 
 import scala.concurrent.duration.Duration
@@ -24,23 +23,23 @@ object Services {
 
   //TODO: Cambiar a Option[T] en lugar de crear instancias por defecto
 
-  def getChallengerPlayers(pathFile: String)
-                          (implicit actorSystem: ActorSystem): Map[Region, LeagueListDTO] =
+  def getChallengerPlayers(pathFile: String)()
+                          (implicit header: RawHeader, actorSystem: ActorSystem): Map[Region, LeagueListDTO] =
     getFile(pathFile) match {
       case value if value.exists() =>
         logger.info("Loading data from local JSON file")
 
         loadJsonData[Map[Region, LeagueListDTO]](value) //Importante pasarle el tipo para que sepa cómo serializar
       case value =>
-        saveDataAsJson[Map[Region, LeagueListDTO]](Regions.values.map(reg => {
-          (reg, Await.result(Unmarshal[HttpResponse](Await.result(Http().singleRequest(HttpRequest(uri = uriProtocol + reg + riotChallengerUri)
-            .withHeaders(headers.RawHeader(riotToken._1, riotToken._2))): Future[HttpResponse], Duration.Inf): HttpResponse)
+        saveDataAsJson[Map[Region, LeagueListDTO]](Region.getAllRegions.map(region => {
+          (region, Await.result(Unmarshal[HttpResponse](Await.result(Http().singleRequest(HttpRequest(uri = uriProtocol + region.reg + riotChallengerUri)
+            .withHeaders(header)): Future[HttpResponse], Duration.Inf): HttpResponse)
             .to[LeagueListDTO], Duration.Inf): LeagueListDTO) //Da un warning por la fecha, al parecer nos devuelven la fecha con un format distinto
         }).toMap[Region, LeagueListDTO])(value)
     }
 
   def getChallengerSummoners(pathFile: String, players: Map[Region, LeagueListDTO])
-                            (implicit actorSystem: ActorSystem): Map[Region, List[SummonerDTO]] =
+                            (implicit header: RawHeader, actorSystem: ActorSystem): Map[Region, List[SummonerDTO]] =
     getFile(pathFile) match {
       case value if value.exists() =>
         logger.info("Loading data from local JSON file")
@@ -52,8 +51,8 @@ object Services {
           (mapEntry._1, mapEntry._2.entries.map(item => {
 
             val request: HttpRequest =
-              HttpRequest(uri = uriProtocol + mapEntry._1 + riotSummonerUri + item.summonerId)
-                .withHeaders(headers.RawHeader(riotToken._1, riotToken._2))
+              HttpRequest(uri = uriProtocol + mapEntry._1.reg + riotSummonerUri + item.summonerId)
+                .withHeaders(header)
 
             Await.result(
               Http().singleRequest(request), Duration.Inf) match {
@@ -86,7 +85,7 @@ object Services {
   }
 
   def getChallengerMatchlist(pathFile: String, summoners: Map[Region, List[SummonerDTO]])
-                            (implicit actorSystem: ActorSystem): Map[Region, List[(SummonerDTO, MatchlistDto)]] =
+                            (implicit header: RawHeader, actorSystem: ActorSystem): Map[Region, List[(SummonerDTO, MatchlistDto)]] =
     getFile(pathFile) match {
       case value if value.exists() =>
         logger.info("Loading data from local JSON file")
@@ -98,8 +97,8 @@ object Services {
         saveDataAsJson[Map[Region, List[(SummonerDTO, MatchlistDto)]]](summoners.map {
           case (region, os) =>
             (region, os.map(value => (value, {
-              val httpRequest: HttpRequest = HttpRequest(uri = uriProtocol + region + riotMatchlistUri + value.accountId)
-                .withHeaders(headers.RawHeader(riotToken._1, riotToken._2))
+              val httpRequest: HttpRequest = HttpRequest(uri = uriProtocol + region.reg + riotMatchlistUri + value.accountId)
+                .withHeaders(header)
 
               Await.result(Http().singleRequest(httpRequest), Duration.Inf) match {
                 case httpResponse: HttpResponse if httpResponse.status.intValue() == maxRequestRateAchieve =>
@@ -130,7 +129,7 @@ object Services {
     }
 
   def getChallengerMatches(pathFile: String, matchesLists: Map[Region, List[(SummonerDTO, MatchlistDto)]])
-                          (implicit actorSystem: ActorSystem): Map[Region, List[MatchDto]] =
+                          (implicit header: RawHeader, actorSystem: ActorSystem): Map[Region, List[MatchDto]] =
     getFile(pathFile) match {
       case file if file.exists() =>
         logger.info("Loading data from local JSON file")
@@ -145,8 +144,8 @@ object Services {
             case (region, list) => (region, list.flatMap {
               case (_, dto) => dto.matches
             }.distinct.take(400).map((reference: MatchReferenceDto) => {
-              val httpRequest: HttpRequest = HttpRequest(uri = uriProtocol + region + riotMatchUri + reference.gameId)
-                .withHeaders(headers.RawHeader(riotToken._1, riotToken._2))
+              val httpRequest: HttpRequest = HttpRequest(uri = uriProtocol + region.reg + riotMatchUri + reference.gameId)
+                .withHeaders(header)
 
               Await.result(Http().singleRequest(httpRequest), Duration.Inf) match {
                 case httpResponse: HttpResponse if httpResponse.status.intValue() == maxRequestRateAchieve =>
