@@ -20,19 +20,28 @@ object ClientAPI extends JsonCustomProtocol with DefaultJsonProtocol with App {
   implicit val materializer: Materializer = Materializer(system)
   implicit val executionContext: ExecutionContextExecutor = system.dispatcher
   implicit val config: Config = ConfigFactory.load("credentials.properties")
+  /*
+    //Spark variables
+    //Spark context
+    val sparkSession: SparkSession = SparkSession.builder().appName("MainTestApp")
+      .master("local[*]").getOrCreate()
+
+    import org.apache.log4j.{Level, Logger}
+    Logger.getRootLogger.setLevel(Level.ERROR)*/
+
 
   //Path to save/load the data
   val outputPath: String = config.getString("outputPath")
-  val challengerPlayersPath: String = outputPath + "challengerPlayers.json" //¿Añadir los paths a la configuración o dejarlos aqui?
-  val challengerSummonerPath: String = outputPath + "challengerSummoners.json"
+  val challengerPlayersPath: String = outputPath + "challengerPlayersTest.json" //¿Añadir los paths a la configuración o dejarlos aqui?
+  val challengerSummonerPath: String = outputPath + "challengerSummonersTest.json"
   val challengerMatchlistPath: String = outputPath + "challengerMatchlist.json"
   val challengerMatchesPath: String = outputPath + "challenger1000Matches.json"
 
   //API Request Headers
-  implicit val rawHeader = RawHeader(config.getString("riotToken"), config.getString("apiKey"))
+  implicit val riotHeader: RawHeader = RawHeader(config.getString("riotToken"), config.getString("apiKey"))
 
 
-  val challengerPlayerDS: Map[Region, LeagueListDTO] = getChallengerPlayers(challengerPlayersPath)
+  val challengerPlayerDS: Map[Region, LeagueListDTO] = Await.result(getChallengerPlayers(challengerPlayersPath), Duration.Inf)
 
   /*
   Muchas llamadas a la API sería mejor una estrategia concurrente
@@ -40,7 +49,7 @@ object ClientAPI extends JsonCustomProtocol with DefaultJsonProtocol with App {
   Gran problema con el volumen de llamadas a la API = Mucho tiempo en la recopilación de datos
    */
   val challengerSummonerDS: Map[Region, List[SummonerDTO]] =
-    getChallengerSummoners(challengerSummonerPath, challengerPlayerDS)
+    Await.result(getChallengerSummoners(challengerSummonerPath, challengerPlayerDS), Duration.Inf)
 
   val challengerMatchlistDS: Map[Region, List[(SummonerDTO, MatchlistDto)]] =
     getChallengerMatchlist(challengerMatchlistPath, challengerSummonerDS)
@@ -58,6 +67,8 @@ object ClientAPI extends JsonCustomProtocol with DefaultJsonProtocol with App {
     (res, System.nanoTime() - start)
   }
 
+  //sparkSession.read.option("multiline",value = true).json(challengerPlayersPath).select("br1").show()
+  println()
 
   println("END")
   //Obtenemos un "harmless" error al cerrar el cliente TODO Arreglarlo

@@ -3,17 +3,17 @@ package service
 import akka.actor.ActorSystem
 import akka.http.scaladsl.Http
 import akka.http.scaladsl.model.headers.RawHeader
-import akka.http.scaladsl.model.{HttpRequest, HttpResponse}
+import akka.http.scaladsl.model.{HttpHeader, HttpRequest, HttpResponse}
 import akka.http.scaladsl.unmarshalling.Unmarshal
 import com.typesafe.scalalogging.Logger
 import dto.`match`.{MatchDto, MatchReferenceDto, MatchlistDto}
-import dto.player.{LeagueListDTO, SummonerDTO}
+import dto.player.{LeagueItemDTO, LeagueListDTO, SummonerDTO}
 import usefull.FilesManagement._
-import usefull.Region
 import usefull.Uris._
+import usefull.{MaxRequestException, Region}
 
 import scala.concurrent.duration.Duration
-import scala.concurrent.{Await, Future}
+import scala.concurrent.{Await, ExecutionContext, Future}
 
 //TODO Bring the API calls here
 object Services {
@@ -23,23 +23,30 @@ object Services {
 
   //TODO: Cambiar a Option[T] en lugar de crear instancias por defecto
 
+  //TODO: Funciona pero no es muy robusto respecto a fallos por parte de la API
   def getChallengerPlayers(pathFile: String)()
-                          (implicit header: RawHeader, actorSystem: ActorSystem): Map[Region, LeagueListDTO] =
+                          (implicit actorSystem: ActorSystem, ec: ExecutionContext, header: RawHeader): Future[Map[Region, LeagueListDTO]] =
     getFile(pathFile) match {
       case value if value.exists() =>
         logger.info("Loading data from local JSON file")
 
         loadJsonData[Map[Region, LeagueListDTO]](value) //Importante pasarle el tipo para que sepa cómo serializar
       case value =>
-        saveDataAsJson[Map[Region, LeagueListDTO]](Region.getAllRegions.map(region => {
-          (region, Await.result(Unmarshal[HttpResponse](Await.result(Http().singleRequest(HttpRequest(uri = uriProtocol + region.reg + riotChallengerUri)
-            .withHeaders(header)): Future[HttpResponse], Duration.Inf): HttpResponse)
-            .to[LeagueListDTO], Duration.Inf): LeagueListDTO) //Da un warning por la fecha, al parecer nos devuelven la fecha con un format distinto
-        }).toMap[Region, LeagueListDTO])(value)
+        saveDataAsJson[Map[Region, LeagueListDTO]](getLeagueLists(Region.getAllRegions, header))(value)
     }
 
+  private def getLeagueLists(regions: List[Region], riotHeader: RawHeader)(implicit ac: ActorSystem, ex: ExecutionContext): Future[Map[Region, LeagueListDTO]] =
+    Future.foldLeft(
+      regions map (reg => getLeagueList(reg, riotHeader) map (l => (reg, l)))
+    )(Map[Region, LeagueListDTO]())(_ + _)
+
+  private def getLeagueList(region: Region, riotHeader: RawHeader)(implicit ac: ActorSystem, ex: ExecutionContext): Future[LeagueListDTO] =
+    Http().singleRequest(
+      HttpRequest(uri = uriProtocol + region.reg + riotChallengerUri).withHeaders(riotHeader)
+    ) flatMap (Unmarshal(_).to[LeagueListDTO])
+
   def getChallengerSummoners(pathFile: String, players: Map[Region, LeagueListDTO])
-                            (implicit header: RawHeader, actorSystem: ActorSystem): Map[Region, List[SummonerDTO]] =
+                            (implicit header: RawHeader, actorSystem: ActorSystem, ex: ExecutionContext): Future[Map[Region, List[SummonerDTO]]] =
     getFile(pathFile) match {
       case value if value.exists() =>
         logger.info("Loading data from local JSON file")
@@ -47,29 +54,44 @@ object Services {
       case value =>
         logger.info("Estimated time to get the data from the API (with a Personal API key): 20 min")
 
-        saveDataAsJson[Map[Region, List[SummonerDTO]]](players.map(mapEntry =>
-          (mapEntry._1, mapEntry._2.entries.map(item => {
-
-            val request: HttpRequest =
-              HttpRequest(uri = uriProtocol + mapEntry._1.reg + riotSummonerUri + item.summonerId)
-                .withHeaders(header)
-
-            Await.result(
-              Http().singleRequest(request), Duration.Inf) match {
-              case value if value.status.intValue() == maxRequestRateAchieve =>
-                Await.result(Unmarshal[HttpResponse](retryRequest(value)(request))
-                  .to[SummonerDTO], Duration.Inf)
-              case value if value.status.isSuccess() => Await.result(
-                Unmarshal[HttpResponse](value)
-                  .to[SummonerDTO], Duration.Inf)
-              case e =>
-                e.discardEntityBytes()
-                logger.error(e.toString())
-                logger.error("Server responses was failed")
-                SummonerDTO(0, "", "", 0, 0, "", "") //Default instance if it fails
-            }
-          }): List[SummonerDTO])))(value)
+        saveDataAsJson[Map[Region, List[SummonerDTO]]](getAllSummoners(players.map(entry => (entry._1, entry._2.entries)), header))(value)
     }
+
+  private def getAllSummoners(players: Map[Region, List[LeagueItemDTO]], header: RawHeader)
+                             (implicit ex: ExecutionContext, as: ActorSystem) =
+    Future.foldLeft(players map (entry => getSummoners(entry._1, entry._2, header)))(Map[Region, List[SummonerDTO]]())(_ + _)
+
+  private def getSummoners(region: Region, players: List[LeagueItemDTO], header: RawHeader)
+                          (implicit ex: ExecutionContext, ac: ActorSystem) =
+    Future.foldLeft(
+      players map (pl => getSummoner(region, pl.summonerId, header))
+    )((region, List[SummonerDTO]()))((r, t) => (r._1, t :: r._2))
+
+  private def getSummoner(region: Region, sumId: String, header: RawHeader)
+                         (implicit ac: ActorSystem, ex: ExecutionContext): Future[SummonerDTO] = {
+    val futHttpRequest = Http().singleRequest(HttpRequest(uri = uriProtocol + region.reg + riotSummonerUri + sumId)
+      .withHeaders(header)) transform {
+      case util.Success(value) if value.status.intValue() == maxRequestRateAchieve =>
+        value.discardEntityBytes()
+        throw MaxRequestException(getTimeToWait(value))
+      case e => e
+    }
+    futHttpRequest recoverWith { case e: MaxRequestException =>
+      Thread.sleep(e.timeToWait * 1000 + 50)
+      logger.info("We are taking a break for " + e.timeToWait + " seg")
+      Http().singleRequest(HttpRequest(uri = uriProtocol + region.reg + riotSummonerUri + sumId)
+        .withHeaders(header))
+    } flatMap (e => {
+      Unmarshal(e).to[SummonerDTO]
+    })
+  }
+
+  private def getTimeToWait(httpResponse: HttpResponse): Int =
+    httpResponse.headers.foldLeft[Option[HttpHeader]](None) {
+      case (None, header) if header.is("retry-after") => Some(header)
+      case (Some(header), _) => Some(header)
+      case _ => None
+    } map (_.value().toInt) getOrElse (105)
 
   private def retryRequest(httpResponse: HttpResponse)(httpRequest: HttpRequest)
                           (implicit actorSystem: ActorSystem): HttpResponse = {

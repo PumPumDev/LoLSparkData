@@ -2,28 +2,20 @@ package usefull
 
 import java.io.{File, PrintWriter}
 
+import com.typesafe.scalalogging.Logger
 import json.protocol.JsonCustomProtocol
 import spray.json._
 
+import scala.concurrent.{ExecutionContext, Future}
 import scala.io.Source
+import scala.util.{Failure, Success}
 
 /*
 Elegimos reducir a este archivo el manejo de ficheros que emplea Java y una programación menos funcional
  */
 object FilesManagement extends JsonCustomProtocol {
 
-
-  /*
-  val challengerPlayersFile: File =
-    new File(config.getString("outputPath") + "challengerPlayers.json")
-  val challengerSummonersFile: File =
-    new File(config.getString("outputPath") + "challengerSummoners.json")
-  val challengerMatchlistFile: File =
-    new File(config.getString("outputPath") + "challengerMatchlist.json")
-
-  val challengerMatchesFile: File =
-    new File(config.getString("outputPath") + "challenger1000Matches.json")
-  */
+  private val logger = Logger("IOFile")
 
   def getFile(path: String): File =
     new File(path)
@@ -42,6 +34,15 @@ object FilesManagement extends JsonCustomProtocol {
     jsonData.convertTo[T]
   }
 
+  def loadJsonData[T](file: File)(implicit reader: JsonReader[T], ex: ExecutionContext): Future[T] = {
+    Future {
+      val sourceFile = Source.fromFile(file)
+      val jsonData = sourceFile.mkString.parseJson
+      sourceFile.close()
+      jsonData.convertTo[T]
+    }
+  }
+
   /**
    * Save data into a Json file and
    *
@@ -55,6 +56,17 @@ object FilesManagement extends JsonCustomProtocol {
     val printer = new PrintWriter(file)
     printer.write(t.toJson.prettyPrint)
     printer.close()
+    t
+  }
+
+  def saveDataAsJson[T](t: Future[T])(file: File)(implicit writer: JsonWriter[T], ex: ExecutionContext): Future[T] = {
+    t.onComplete {
+      case Failure(_) => logger.error("The data could NOT be saved")
+      case Success(value) =>
+        val printer = new PrintWriter(file)
+        printer.write(value.toJson.prettyPrint)
+        printer.close()
+    }
     t
   }
 

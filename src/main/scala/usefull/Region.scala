@@ -21,7 +21,7 @@ object Region {
   def getAllRegions: List[Region] = List(Region.RU, Region.BR, Region.EUN, Region.EUW, Region.JP, Region.KR, Region.LA1, Region.LA2, Region.NA, Region.OC, Region.TR)
 
   implicit object RegionFormat extends RootJsonFormat[Region] with DefaultJsonProtocol {
-    override def write(obj: Region): JsValue = JsString(obj.toString)
+    override def write(obj: Region): JsValue = JsString(obj.reg.toString)
 
     override def read(json: JsValue): Region = json match {
       case JsString(value) => Region(value)
