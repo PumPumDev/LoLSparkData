@@ -1,203 +1,163 @@
 package service
 
+import java.io.File
+
 import akka.actor.ActorSystem
-import akka.http.scaladsl.Http
 import akka.http.scaladsl.model.headers.RawHeader
-import akka.http.scaladsl.model.{HttpHeader, HttpRequest, HttpResponse}
-import akka.http.scaladsl.unmarshalling.Unmarshal
+import akka.http.scaladsl.model.{HttpResponse, Uri}
+import akka.stream.scaladsl.{Flow, Keep, Sink}
+import akka.stream.{IOResult, Materializer}
 import com.typesafe.scalalogging.Logger
-import dto.`match`.{MatchDto, MatchReferenceDto, MatchlistDto}
-import dto.player.{LeagueItemDTO, LeagueListDTO, SummonerDTO}
+import dto.`match`.{MatchDto, MatchlistDto}
+import dto.player.{LeagueListDTO, SummonerDTO}
+import service.StreamComponents._
 import usefull.FilesManagement._
+import usefull.Region
 import usefull.Uris._
-import usefull.{MaxRequestException, Region}
 
-import scala.concurrent.duration.Duration
-import scala.concurrent.{Await, ExecutionContext, Future}
-import scala.util.Failure
+import scala.concurrent.duration.FiniteDuration
+import scala.concurrent.{ExecutionContext, Future, duration}
+import scala.util.{Failure, Success, Try}
 
-//TODO Bring the API calls here
-object Services {
-  private val maxRequestRateAchieve = 429
+
+//TODO: Use loggers in streams
+object Services { //TODO: File Manage take out of this file
 
   private val logger = Logger("Service")
 
-  //TODO: Cambiar a Option[T] en lugar de crear instancias por defecto
-
-  //TODO: Funciona pero no es muy robusto respecto a fallos por parte de la API
-  def getChallengerPlayers(pathFile: String)()
-                          (implicit actorSystem: ActorSystem, ec: ExecutionContext, header: RawHeader): Future[Map[Region, LeagueListDTO]] =
-    getFile(pathFile) match {
-      case value if value.exists() =>
-        logger.info("Loading data from local JSON file")
-
-        loadJsonData[Map[Region, LeagueListDTO]](value) //Importante pasarle el tipo para que sepa cómo serializar
-      case value =>
-        saveDataAsJson[Map[Region, LeagueListDTO]](getLeagueLists(Region.getAllRegions, header))(value)
-    }
-
-  private def getLeagueLists(regions: List[Region], riotHeader: RawHeader)(implicit ac: ActorSystem, ex: ExecutionContext): Future[Map[Region, LeagueListDTO]] =
-    Future.foldLeft(
-      regions map (reg => getLeagueList(reg, riotHeader) map (l => (reg, l)))
-    )(Map[Region, LeagueListDTO]())(_ + _)
-
-  def getChallengerMatchlist(pathFile: String, summoners: Map[Region, List[SummonerDTO]])
-                            (implicit header: RawHeader, actorSystem: ActorSystem): Map[Region, List[(SummonerDTO, MatchlistDto)]] =
-    getFile(pathFile) match {
-      case value if value.exists() =>
-        logger.info("Loading data from local JSON file")
-
-        loadJsonData[Map[Region, List[(SummonerDTO, MatchlistDto)]]](value)
-
-      case file =>
-        logger.info("Estimated time to get the data from the API (with a Personal API key): 30 min")
-        saveDataAsJson[Map[Region, List[(SummonerDTO, MatchlistDto)]]](summoners.map {
-          case (region, os) =>
-            (region, os.map(value => (value, {
-              val httpRequest: HttpRequest = HttpRequest(uri = uriProtocol + region + riotMatchlistUri + value.accountId)
-                .withHeaders(header)
-
-              Await.result(Http().singleRequest(httpRequest), Duration.Inf) match {
-                case httpResponse: HttpResponse if httpResponse.status.intValue() == maxRequestRateAchieve =>
-                  logger.info(httpResponse.toString())
-                  retryRequest(httpResponse)(httpRequest) match {
-                    case retryResponse: HttpResponse if retryResponse.status.isSuccess() =>
-                      Await.result(Unmarshal[HttpResponse](retryResponse)
-                        .to[MatchlistDto], Duration.Inf)
-                    case retryResponse =>
-                      retryResponse.discardEntityBytes()
-                      logger.error("Server retry was failed")
-                      logger.error(retryResponse.toString())
-                      MatchlistDto(List(), 0, 0, 0) //Default instance if it fails
-                  }
-
-                case httpResponse: HttpResponse if httpResponse.status.isSuccess() =>
-
-                  Await.result(Unmarshal[HttpResponse](httpResponse).to[MatchlistDto], Duration.Inf)
-
-                case e =>
-                  e.discardEntityBytes()
-                  logger.error(e.toString())
-                  logger.error("Server responses was failed")
-                  MatchlistDto(List(), 0, 0, 0) //Default instance if it fails
-              }
-            })))
-        })(file)
-    }
-
-  private def retryRequest(httpResponse: HttpResponse)(httpRequest: HttpRequest)
-                          (implicit actorSystem: ActorSystem): HttpResponse = {
-    val timeToWait: Int = httpResponse.headers.filter(header => header.is("retry-after"))
-      .map(header => header.value().toInt) match {
-      case list if list.nonEmpty => list.head
-      case _ => 105
-    }
-    httpResponse.discardEntityBytes() //We have to process response even when it has no data
-    logger.info("Max Rate Achieve. We are waiting " + timeToWait + " seconds to continue")
-    Thread.sleep(timeToWait * 1000 + 50) //We convert it into milliseconds
-    Await.result(Http().singleRequest(httpRequest), Duration.Inf)
+  private val errorResponseCondition: ((Try[HttpResponse], Uri)) => Boolean = {
+    case (Success(value), _) if value.status.isSuccess() => false
+    case _ => true
   }
 
-  def getChallengerSummoners(pathFile: String, players: Map[Region, LeagueListDTO])
-                            (implicit header: RawHeader, actorSystem: ActorSystem, ex: ExecutionContext): Future[Map[Region, List[SummonerDTO]]] =
-    getFile(pathFile) match {
-      case value if value.exists() =>
-        logger.info("Loading data from local JSON file")
-        loadJsonData[Map[Region, List[SummonerDTO]]](value)
-      case value =>
-        logger.info("Estimated time to get the data from the API (with a Personal API key): 20 min")
+  //TODO: Hacer mejor los loggers y devoluciones en caso de error
+  def updateChallengerData(regions: List[Region], headers: List[RawHeader], outputPath: String)
+                          (implicit as: ActorSystem, ex: ExecutionContext): Future[List[IOResult]] =
+    Future.foldLeft(regions map (reg => {
+      logger.info("Updating players data...")
+      updateChallengerPlayers(headers, outputPath, reg).transformWith[IOResult] {
+        case Success(_) =>
+          logger.info("Players was successfully updated")
+          logger.info("Updating summoners data...")
+          updateChallengerSummoners(headers, outputPath, reg).transformWith[IOResult] {
+            case Success(_) =>
+              logger.info("Summoners was successfully updated")
+              logger.info("Updating match references data...")
+              updateChallengerMatchReferences(headers, outputPath, reg).transformWith[IOResult] {
+                case Success(_) =>
+                  logger.info("Match references was successfully updated")
+                  logger.info("Updating matches data...")
+                  updateChallengerMatches(headers, outputPath, reg).transform {
+                    case Success(value: IOResult) =>
+                      logger.info("Matches was successfully updated")
+                      logger.info(s"Region $reg data was successfully updated !!")
+                      Try(value)
+                    case Failure(exception) =>
+                      logger.error(s"There was an error updating challenger MATCHES data\n$exception")
+                      Try(IOResult(0))
+                  }
+                case Failure(exception) =>
+                  logger.error(s"There was an error updating challenger MATCH REFERENCES data\n$exception")
+                  Future(IOResult(0))
+              }
+            case Failure(exception) =>
+              logger.error(s"There was an error updating challenger SUMMONERS data\n$exception")
+              Future(IOResult(0))
+          }
+        case Failure(exception) =>
+          logger.error(s"There was an error updating challenger PLAYERS data\n$exception")
+          Future(IOResult(0))
+      }
+    }))(List[IOResult]())((result, elem) => elem :: result)
 
-        saveDataAsJson[Map[Region, List[SummonerDTO]]](getAllSummoners(players.map(entry => (entry._1, entry._2.entries)), header))(value)
-    }
 
-  private def getAllSummoners(players: Map[Region, List[LeagueItemDTO]], header: RawHeader)
-                             (implicit ex: ExecutionContext, as: ActorSystem) =
-    Future.foldLeft(players map (entry => getSummoners(entry._1, entry._2, header)))(Map[Region, List[SummonerDTO]]())(_ + _)
+  def getChallengerPlayers(outputPath: String)(implicit mat: Materializer, ex: ExecutionContext): Future[Map[Region, LeagueListDTO]] = {
+    //TODO: Refactor Paths and what happen if the file does not exist
+    Future.foldLeft(Region.getAllRegions.map(reg => loadData[LeagueListDTO](getPlayerPath(outputPath, reg)).map(reg -> _.head)))(Map[Region, LeagueListDTO]())(_ + _)
+  }
 
-  private def getSummoners(region: Region, players: List[LeagueItemDTO], header: RawHeader)
-                          (implicit ex: ExecutionContext, ac: ActorSystem) =
-    Future.foldLeft(
-      players map (pl => getSummoner(region, pl.summonerId, header))
-    )((region, List[SummonerDTO]()))((r, t) => (r._1, t :: r._2))
+  //TODO: Return unique Future
+  //FIXME: If the directory does not exist it the IO operation fails
+  def updateChallengerPlayers(headers: List[RawHeader], outputPath: String, region: Region)
+                             (implicit as: ActorSystem, ex: ExecutionContext): Future[IOResult] = {
+    //First we delete the old data
+    new File(getPlayerPath(outputPath, region)).delete()
 
-  private def getSummoner(region: Region, sumId: String, header: RawHeader)
-                         (implicit ac: ActorSystem, ex: ExecutionContext): Future[SummonerDTO] = {
-    val futHttpRequest = Http().singleRequest(HttpRequest(uri = uriProtocol + region + riotSummonerUri + sumId)
-      .withHeaders(header)) transform {
-      case util.Success(value) if value.status.intValue() == maxRequestRateAchieve =>
-        value.discardEntityBytes()
-        Failure(MaxRequestException(getTimeToWait(value)))
-      case e => e
-    }
-    futHttpRequest recoverWith { case e: MaxRequestException =>
-      Thread.sleep(e.timeToWait * 1000 + 50)
-      logger.info("We are taking a break for " + e.timeToWait + " seg")
-      Http().singleRequest(HttpRequest(uri = uriProtocol + region + riotSummonerUri + sumId)
-        .withHeaders(header))
-    } flatMap (e => {
-      Unmarshal(e).to[SummonerDTO]
+    //Now we start making petitions to the API
+    getDataFromAPI(region, List(riotChallengerUri), getPlayerPath(outputPath, region), headers)
+  }
+
+  def updateChallengerSummoners(headers: List[RawHeader], outputPath: String, region: Region)
+                               (implicit as: ActorSystem, ex: ExecutionContext): Future[IOResult] = {
+    //First we delete the old data
+    new File(getSummonerPath(outputPath, region)).delete()
+
+    // We load the players data TODO: Check the data is available and get if it is not
+    loadData[LeagueListDTO](getPlayerPath(outputPath, region))
+      .map(_.flatMap(_.entries.map(item => riotSummonerUri + item.summonerId)))
+      .flatMap(uris => getDataFromAPI(region, uris, getSummonerPath(outputPath, region), headers)) //Then we make de API calls
+  }
+
+  // We load the players data TODO: Check the data is available and get if it is not
+  def updateChallengerMatchReferences(headers: List[RawHeader], outputPath: String, region: Region)
+                                     (implicit as: ActorSystem, ex: ExecutionContext): Future[IOResult] = {
+    //First we delete the old data
+    new File(getMatchesReferencesPath(outputPath, region)).delete()
+
+    // We load the summoners data TODO: Check the data is available and get if it is not
+    loadData[SummonerDTO](getSummonerPath(outputPath, region)).map(_.map(riotMatchlistUri + _.accountId))
+      .flatMap(uris =>
+        getDataFromAPI(region, uris, getMatchesReferencesPath(outputPath, region), headers)) //Then we make de API calls
+  }
+
+  def getChallengerMatches(outputPath: String)(implicit mat: Materializer, ex: ExecutionContext): Future[Map[Region, List[MatchDto]]] = {
+    Future.foldLeft(Region.getAllRegions.map(reg => loadData[MatchDto](getMatchesPath(outputPath, reg)).map(reg -> _)))(Map[Region, List[MatchDto]]())(_ + _)
+  }
+
+  def updateChallengerMatches(headers: List[RawHeader], outputPath: String, region: Region)
+                             (implicit as: ActorSystem, ex: ExecutionContext): Future[IOResult] = {
+    //First we delete the old data
+    new File(getMatchesPath(outputPath, region)).delete()
+
+    // We load the match references data
+    loadData[MatchlistDto](getMatchesReferencesPath(outputPath, region))
+      .map(_.flatMap(_.matches).map(riotMatchUri + _.gameId)) //TODO: IF there are too many matches we can take just first 1000 or something like that
+      .flatMap(uris => getDataFromAPI(region, uris, getMatchesPath(outputPath, region), headers))
+  }
+
+
+  //TODO: Use implicit headers
+  //Hay un caso extremo que es que TODAS las petiones fallen. Que genera una excepcion por la concatenación de Source vacias
+  def getDataFromAPI(region: Region, uris: List[String], outputPath: String, headers: List[RawHeader])
+                    (implicit as: ActorSystem, ex: ExecutionContext): Future[IOResult] = {
+    var errorResponses: List[Uri] = List()
+
+    //Lanzamos las peticiones
+    createRequests(region, uris)(headers).throttle(100, FiniteDuration(2, duration.MINUTES) + FiniteDuration(1, duration.SECONDS)) //.log("HTTPCreated: ").addAttributes(Attributes.logLevels(onElement = Attributes.LogLevels.Info))
+      .via(sendRequest(region)).divertTo(Sink.foreach(elem => {
+      logger.warn(s"Elem failed on 1st try: $elem")
+      elem._1.getOrElse(HttpResponse()).discardEntityBytes()
+      errorResponses = elem._2 :: errorResponses
+    }), errorResponseCondition)
+      .via(Flow.fromFunction(_._1.get))
+      .flatMapConcat(_.entity.dataBytes)
+      .toMat(writeData(region, outputPath))(Keep.right).run().transformWith(result => {
+      logger.info(s"First Request result: $result")
+      errorResponseHandler(errorResponses, region, outputPath, headers)
     })
   }
 
-  private def getTimeToWait(httpResponse: HttpResponse): Int =
-    httpResponse.headers.foldLeft[Option[HttpHeader]](None) {
-      case (None, header) if header.is("retry-after") => Some(header)
-      case (Some(header), _) => Some(header)
-      case _ => None
-    } map (_.value().toInt) getOrElse 105
-
-  def getChallengerMatches(pathFile: String, matchesLists: Map[Region, List[(SummonerDTO, MatchlistDto)]])
-                          (implicit header: RawHeader, actorSystem: ActorSystem): Map[Region, List[MatchDto]] =
-    getFile(pathFile) match {
-      case file if file.exists() =>
-        logger.info("Loading data from local JSON file")
-
-        loadJsonData[Map[Region, List[MatchDto]]](file)
-
-      case file =>
-        logger.info("Estimated time to get the data from the API (with a Personal API key): +40 min")
-
-        saveDataAsJson[Map[Region, List[MatchDto]]](
-          matchesLists.map {
-            case (region, list) => (region, list.flatMap {
-              case (_, dto) => dto.matches
-            }.distinct.take(400).map((reference: MatchReferenceDto) => {
-              val httpRequest: HttpRequest = HttpRequest(uri = uriProtocol + region + riotMatchUri + reference.gameId)
-                .withHeaders(header)
-
-              Await.result(Http().singleRequest(httpRequest), Duration.Inf) match {
-                case httpResponse: HttpResponse if httpResponse.status.intValue() == maxRequestRateAchieve =>
-                  logger.info(httpResponse.toString())
-                  retryRequest(httpResponse)(httpRequest) match {
-                    case retryResponse: HttpResponse if retryResponse.status.isSuccess() =>
-                      Await.result(Unmarshal[HttpResponse](retryResponse)
-                        .to[MatchDto], Duration.Inf)
-
-                    case retryResponse =>
-                      retryResponse.discardEntityBytes()
-                      logger.error("Server retry was failed")
-                      logger.error(retryResponse.toString())
-                      MatchDto(0, 0, 0, List(), "", "", "", 0, "", List(), List(), 0, 0) //Default instance if it fails
-                  }
+  //TODO: Podria añadirse los nuevos resultados a la fuente inicial de HttpResponse??
+  //TODO: Evitar el uso de variables mutables
+  private def errorResponseHandler(errorResponses: List[Uri], region: Region, outputPath: String, headers: List[RawHeader])
+                                  (implicit as: ActorSystem, ex: ExecutionContext): Future[IOResult] = {
 
 
-                case httpResponse: HttpResponse if httpResponse.status.isSuccess() =>
-                  Await.result(Unmarshal[HttpResponse](httpResponse).to[MatchDto], Duration.Inf)
+    createRequestRetry(errorResponses, headers).throttle(100, FiniteDuration(2, duration.MINUTES) + FiniteDuration(1, duration.SECONDS))
+      .via(sendRequest(region)).divertTo(Sink.foreach(elem => {
+      logger.error(s"Elem failed on retry: $elem")
+      elem._1.getOrElse(HttpResponse()).discardEntityBytes()
+    }), errorResponseCondition).via(Flow.fromFunction(_._1.get)).flatMapConcat(_.entity.dataBytes).toMat(writeData(region, outputPath))(Keep.right).run()
+  }
 
-
-                case e =>
-                  e.discardEntityBytes()
-                  logger.error(e.toString())
-                  logger.error("Server responses was failed")
-                  MatchDto(0, 0, 0, List(), "", "", "", 0, "", List(), List(), 0, 0) //Default instance if it fails
-              }
-            }))
-          }
-        )(file)
-    }
-
-  private def getLeagueList(region: Region, riotHeader: RawHeader)(implicit ac: ActorSystem, ex: ExecutionContext): Future[LeagueListDTO] =
-    Http().singleRequest(
-      HttpRequest(uri = uriProtocol + region + riotChallengerUri).withHeaders(riotHeader)
-    ) flatMap (Unmarshal(_).to[LeagueListDTO])
 }

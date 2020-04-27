@@ -16,7 +16,7 @@ libraryDependencies += "com.typesafe.akka" %% "akka-http-core" % "10.1.11"
 
 libraryDependencies += "com.typesafe.akka" %% "akka-http" % "10.1.11"
 
-libraryDependencies += "com.typesafe.akka" %% "akka-stream" % "2.6.3"
+libraryDependencies += "com.typesafe.akka" %% "akka-stream" % "2.6.4"
 
 //Managing JSON
 libraryDependencies += "com.typesafe.akka" %% "akka-http-spray-json" % "10.1.11"
@@ -29,4 +29,16 @@ libraryDependencies += "com.typesafe" % "config" % "1.4.0"
 
 //Manage Log
 libraryDependencies += "com.typesafe.scala-logging" %% "scala-logging" % "3.9.2"
+
+//Circe (Json manage)
+val circeVersion = "0.12.3"
+
+libraryDependencies ++= Seq(
+  "io.circe" %% "circe-core",
+  "io.circe" %% "circe-generic",
+  "io.circe" %% "circe-parser"
+).map(_ % circeVersion)
+
+// Integration circe and akka http
+libraryDependencies += "de.heikoseeberger" % "akka-http-circe_2.12" % "1.31.0"
 
