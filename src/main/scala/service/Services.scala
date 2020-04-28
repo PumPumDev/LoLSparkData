@@ -10,11 +10,13 @@ import akka.stream.{IOResult, Materializer}
 import com.typesafe.scalalogging.Logger
 import dto.`match`.{MatchDto, MatchlistDto}
 import dto.player.{LeagueListDTO, SummonerDTO}
+import io.circe.generic.auto._
 import service.StreamComponents._
 import usefull.FilesManagement._
 import usefull.Region
 import usefull.Uris._
 
+import scala.collection.mutable
 import scala.concurrent.duration.FiniteDuration
 import scala.concurrent.{ExecutionContext, Future, duration}
 import scala.util.{Failure, Success, Try}
@@ -34,38 +36,38 @@ object Services { //TODO: File Manage take out of this file
   def updateChallengerData(regions: List[Region], headers: List[RawHeader], outputPath: String)
                           (implicit as: ActorSystem, ex: ExecutionContext): Future[List[IOResult]] =
     Future.foldLeft(regions map (reg => {
-      logger.info("Updating players data...")
-      updateChallengerPlayers(headers, outputPath, reg).transformWith[IOResult] {
+      logger.info(s"Updating $reg players data...")
+      updateChallengerPlayers(List(headers.head), outputPath, reg).transformWith[IOResult] {
         case Success(_) =>
-          logger.info("Players was successfully updated")
-          logger.info("Updating summoners data...")
-          updateChallengerSummoners(headers, outputPath, reg).transformWith[IOResult] {
+          logger.info(s"$reg Players was successfully updated")
+          logger.info(s"Updating $reg summoners data...")
+          updateChallengerSummoners(List(headers.head), outputPath, reg).transformWith[IOResult] {
             case Success(_) =>
-              logger.info("Summoners was successfully updated")
-              logger.info("Updating match references data...")
-              updateChallengerMatchReferences(headers, outputPath, reg).transformWith[IOResult] {
+              logger.info(s"$reg Summoners was successfully updated")
+              logger.info(s"Updating $reg match references data...")
+              updateChallengerMatchReferences(List(headers.head), outputPath, reg).transformWith[IOResult] {
                 case Success(_) =>
-                  logger.info("Match references was successfully updated")
-                  logger.info("Updating matches data...")
+                  logger.info(s"$reg Match references was successfully updated")
+                  logger.info(s"Updating $reg matches data...")
                   updateChallengerMatches(headers, outputPath, reg).transform {
                     case Success(value: IOResult) =>
-                      logger.info("Matches was successfully updated")
+                      logger.info(s"$reg Matches was successfully updated")
                       logger.info(s"Region $reg data was successfully updated !!")
                       Try(value)
                     case Failure(exception) =>
-                      logger.error(s"There was an error updating challenger MATCHES data\n$exception")
+                      logger.error(s"There was an error updating challenger $reg MATCHES data\n$exception")
                       Try(IOResult(0))
                   }
                 case Failure(exception) =>
-                  logger.error(s"There was an error updating challenger MATCH REFERENCES data\n$exception")
+                  logger.error(s"There was an error updating challenger $reg MATCH REFERENCES data\n$exception")
                   Future(IOResult(0))
               }
             case Failure(exception) =>
-              logger.error(s"There was an error updating challenger SUMMONERS data\n$exception")
+              logger.error(s"There was an error updating challenger $reg SUMMONERS data\n$exception")
               Future(IOResult(0))
           }
         case Failure(exception) =>
-          logger.error(s"There was an error updating challenger PLAYERS data\n$exception")
+          logger.error(s"There was an error updating challenger $reg PLAYERS data\n$exception")
           Future(IOResult(0))
       }
     }))(List[IOResult]())((result, elem) => elem :: result)
@@ -119,31 +121,33 @@ object Services { //TODO: File Manage take out of this file
     //First we delete the old data
     new File(getMatchesPath(outputPath, region)).delete()
 
+    //TODO: Make a more declarative solution
+    val idsProcessed: mutable.Set[Long] = mutable.Set()
+
     // We load the match references data
     loadData[MatchlistDto](getMatchesReferencesPath(outputPath, region))
-      .map(_.flatMap(_.matches).map(riotMatchUri + _.gameId)) //TODO: IF there are too many matches we can take just first 1000 or something like that
+      .map(_.flatMap(_.matches).filterNot(ref => wasIdProcessed(ref.gameId, idsProcessed)).map(riotMatchUri + _.gameId)) //TODO: IF there are too many matches we can take just first 1000 or something like that
       .flatMap(uris => getDataFromAPI(region, uris, getMatchesPath(outputPath, region), headers))
   }
-
 
   //TODO: Use implicit headers
   //Hay un caso extremo que es que TODAS las petiones fallen. Que genera una excepcion por la concatenación de Source vacias
   def getDataFromAPI(region: Region, uris: List[String], outputPath: String, headers: List[RawHeader])
                     (implicit as: ActorSystem, ex: ExecutionContext): Future[IOResult] = {
-    var errorResponses: List[Uri] = List()
+    val errorResponses: mutable.MutableList[Uri] = mutable.MutableList()
 
     //Lanzamos las peticiones
-    createRequests(region, uris)(headers).throttle(100, FiniteDuration(2, duration.MINUTES) + FiniteDuration(1, duration.SECONDS)) //.log("HTTPCreated: ").addAttributes(Attributes.logLevels(onElement = Attributes.LogLevels.Info))
+    createRequests(region, uris)(headers).throttle(headers.length * 100, FiniteDuration(2, duration.MINUTES) + FiniteDuration(1, duration.SECONDS)) //.log("HTTPCreated: ").addAttributes(Attributes.logLevels(onElement = Attributes.LogLevels.Info))
       .via(sendRequest(region)).divertTo(Sink.foreach(elem => {
-      logger.warn(s"Elem failed on 1st try: $elem")
       elem._1.getOrElse(HttpResponse()).discardEntityBytes()
-      errorResponses = elem._2 :: errorResponses
+      logger.warn(s"Elem failed on 1st try: $elem")
+      errorResponses += elem._2
     }), errorResponseCondition)
       .via(Flow.fromFunction(_._1.get))
       .flatMapConcat(_.entity.dataBytes)
       .toMat(writeData(region, outputPath))(Keep.right).run().transformWith(result => {
       logger.info(s"First Request result: $result")
-      errorResponseHandler(errorResponses, region, outputPath, headers)
+      errorResponseHandler(errorResponses.toList, region, outputPath, headers)
     })
   }
 
@@ -152,12 +156,19 @@ object Services { //TODO: File Manage take out of this file
   private def errorResponseHandler(errorResponses: List[Uri], region: Region, outputPath: String, headers: List[RawHeader])
                                   (implicit as: ActorSystem, ex: ExecutionContext): Future[IOResult] = {
 
-
-    createRequestRetry(errorResponses, headers).throttle(100, FiniteDuration(2, duration.MINUTES) + FiniteDuration(1, duration.SECONDS))
+    //TODO: Logger final IOResult
+    createRequestRetry(errorResponses, headers).initialDelay(FiniteDuration(2, duration.MINUTES))
+      .throttle(100 * headers.length, FiniteDuration(2, duration.MINUTES) + FiniteDuration(1, duration.SECONDS))
       .via(sendRequest(region)).divertTo(Sink.foreach(elem => {
-      logger.error(s"Elem failed on retry: $elem")
       elem._1.getOrElse(HttpResponse()).discardEntityBytes()
+      logger.error(s"Elem failed on retry: $elem")
     }), errorResponseCondition).via(Flow.fromFunction(_._1.get)).flatMapConcat(_.entity.dataBytes).toMat(writeData(region, outputPath))(Keep.right).run()
+  }
+
+  private def wasIdProcessed(id: Long, idsProcessed: mutable.Set[Long]): Boolean = {
+    val idAlreadyProcessed = idsProcessed(id)
+    idsProcessed += id
+    idAlreadyProcessed
   }
 
 }

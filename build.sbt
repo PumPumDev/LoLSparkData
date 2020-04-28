@@ -1,6 +1,6 @@
 name := "TfgInf"
 
-version := "1.0"
+version := "1.1"
 
 scalaVersion := "2.12.8"
 
@@ -17,9 +17,6 @@ libraryDependencies += "com.typesafe.akka" %% "akka-http-core" % "10.1.11"
 libraryDependencies += "com.typesafe.akka" %% "akka-http" % "10.1.11"
 
 libraryDependencies += "com.typesafe.akka" %% "akka-stream" % "2.6.4"
-
-//Managing JSON
-libraryDependencies += "com.typesafe.akka" %% "akka-http-spray-json" % "10.1.11"
 
 //Actor system for the concurrency
 libraryDependencies += "com.typesafe.akka" %% "akka-actor" % "2.6.3"
@@ -39,6 +36,4 @@ libraryDependencies ++= Seq(
   "io.circe" %% "circe-parser"
 ).map(_ % circeVersion)
 
-// Integration circe and akka http
-libraryDependencies += "de.heikoseeberger" % "akka-http-circe_2.12" % "1.31.0"
 

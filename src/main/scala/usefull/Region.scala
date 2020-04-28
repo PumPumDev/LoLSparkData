@@ -1,7 +1,5 @@
 package usefull
 
-import spray.json.{DefaultJsonProtocol, JsString, JsValue, RootJsonFormat}
-
 sealed abstract class Region
 
 case object RU extends Region {
@@ -50,25 +48,4 @@ case object LA2 extends Region {
 
 object Region {
   def getAllRegions: List[Region] = List(RU, BR, EUN, EUW, JP, KR, LA1, LA2, NA, OC, TR)
-
-  implicit object RegionFormat extends RootJsonFormat[Region] with DefaultJsonProtocol {
-    override def write(obj: Region): JsValue = JsString(obj.toString)
-
-    override def read(json: JsValue): Region = json match {
-      case JsString(value) => value match {
-        case "ru" => RU
-        case "br1" => BR
-        case "eun1" => EUN
-        case "euw1" => EUW
-        case "jp1" => JP
-        case "kr" => KR
-        case "la1" => LA1
-        case "la2" => LA2
-        case "na1" => NA
-        case "oc1" => OC
-        case "tr1" => TR
-      }
-    }
-  }
-
 }

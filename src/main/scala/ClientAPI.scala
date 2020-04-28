@@ -5,18 +5,21 @@ import akka.stream.Materializer
 import com.typesafe.config.{Config, ConfigFactory}
 import com.typesafe.scalalogging.Logger
 import service.Services._
-import usefull.Region
 
 import scala.concurrent.duration.Duration
 import scala.concurrent.{Await, ExecutionContextExecutor}
 
 
 object ClientAPI extends App {
+
+  private val logger = Logger("API Client")
+
   //Dependencies
   implicit val system: ActorSystem = ActorSystem()
   implicit val materializer: Materializer = Materializer(system)
   implicit val executionContext: ExecutionContextExecutor = system.dispatcher
   implicit val config: Config = ConfigFactory.load("credentials.properties")
+
   //Path to save/load the data
   val outputPath: String = config.getString("outputPath")
   //TODO: Do it better!! Loop or something
@@ -25,13 +28,15 @@ object ClientAPI extends App {
     RawHeader(config.getString("riotToken"), config.getString("apiKey3")),
     RawHeader(config.getString("riotToken"), config.getString("apiKey4")),
     RawHeader(config.getString("riotToken"), config.getString("apiKey5")))
+
+
   // Is this the correct use of for-comprehension?
   val results = for {
-    _ <- updateChallengerData(Region.getAllRegions, apiKeysAvailable, outputPath)
+    // Uncomment this lane to update de data from RIOT API
+    //_ <- updateChallengerData(Region.getAllRegions, apiKeysAvailable, outputPath)
     playersData <- getChallengerPlayers(outputPath)
     matchesData <- getChallengerMatches(outputPath)
   } yield (playersData, matchesData)
-  private val logger = Logger("API Client")
 
 
   println(Await.result(results, Duration.Inf))

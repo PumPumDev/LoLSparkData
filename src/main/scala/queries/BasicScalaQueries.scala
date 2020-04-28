@@ -33,13 +33,16 @@ object BasicScalaQueries {
         .map(item => (item, setScale(winRate(item), 2))))
     }
 
+  private def winRate(leagueItemDto: LeagueItemDTO): Double =
+    (leagueItemDto.wins.toDouble / (leagueItemDto.wins + leagueItemDto.losses)) * 100
+
+  private def setScale(double: Double, scale: Int): Double =
+    BigDecimal(double).setScale(scale, BigDecimal.RoundingMode.HALF_UP).toDouble
+
   def averageWinRatePerRegion(players: Map[Region, LeagueListDTO]): Map[Region, Double] =
     players.map {
       case (region, o) => (region, setScale(o.entries.foldLeft(0d)((op, item) => op + winRate(item)) / o.entries.length, 2))
     }
-
-  private def winRate(leagueItemDto: LeagueItemDTO): Double =
-    (leagueItemDto.wins.toDouble / (leagueItemDto.wins + leagueItemDto.losses)) * 100
 
   //About matches
   def averageMatchesTimePerRegion(matches: Map[Region, List[MatchDto]]): Map[Region, Double] =
@@ -51,9 +54,6 @@ object BasicScalaQueries {
     matches.map {
       case (region, dtoes) => (region, setScale(dtoes.flatMap(_.participants.map(_.stats.get.visionScore.get)).foldLeft(0d)(_ + _) / dtoes.length, 2))
     }
-
-  private def setScale(double: Double, scale: Int): Double =
-    BigDecimal(double).setScale(scale, BigDecimal.RoundingMode.HALF_UP).toDouble
 
   def kdaTopNPlayers(players: Map[Region, LeagueListDTO], matches: Map[Region, List[MatchDto]], numPlayers: Int): Map[Region, List[(String, Option[Double])]] =
     players.map {
