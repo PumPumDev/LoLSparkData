@@ -1,0 +1,15 @@
+# Property to avoid warning messages in data headers responses
+akka.http.client.parsing.ignore-illegal-header-for = [date]
+# Property with the API Riot token
+riot.api.token = X-Riot-Token
+# Property with the API keys to access to the API (The more API Keys you put, the faster data will be obtained)
+riot.api.keys = [apiKey1, apiKey2, apiKey3, apiKey4, apiKey5, ...]
+
+# The path where data will be locally storage
+riot.data.output.path = api_data
+
+# Uris to obtain the data from the API
+riot.api.uri.challenger.player = /lol/league/v4/challengerleagues/by-queue/RANKED_SOLO_5x5
+riot.api.uri.challenger.summoner = /lol/summoner/v4/summoners/
+riot.api.uri.challenger.matchlist = /lol/match/v4/matchlists/by-account/
+riot.api.uri.challenger.match = /lol/match/v4/matches/
