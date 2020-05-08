@@ -1,6 +1,6 @@
 
 // Root project
-lazy val root = (project in file("."))
+lazy val TfgInf = (project in file("."))
   .aggregate(aClient, qScala, qSpark, utils, models)
   .settings(commonSettings)
 
@@ -63,11 +63,11 @@ lazy val qSpark = (project in file("queries-spark"))
   .settings(
     name := "Spark Queries",
     commonSettings,
-
     // https://mvnrepository.com/artifact/org.apache.spark/spark-core
-    libraryDependencies += "org.apache.spark" %% "spark-core" % "3.0.0-preview2",
+    libraryDependencies += "org.apache.spark" %% "spark-core" % "2.4.5",
 
     // https://mvnrepository.com/artifact/org.apache.spark/spark-sql
-    libraryDependencies += "org.apache.spark" %% "spark-sql" % "3.0.0-preview2"
+    libraryDependencies += "org.apache.spark" %% "spark-sql" % "2.4.5"
 
-  ).dependsOn(models)
+
+  ).dependsOn(utils, models)
