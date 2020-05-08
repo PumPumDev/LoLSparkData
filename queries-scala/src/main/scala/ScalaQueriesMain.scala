@@ -21,10 +21,13 @@ object ScalaQueriesMain extends App {
   val playersFut = getChallengerPlayers(outputPath)
   val matchesFut = getChallengerMatches(outputPath)
 
-  val result = for {
-    players <- playersFut
-    matches <- matchesFut
-  } yield (players, matches)
+  //TODO: Scala queries main -> Use iterators
+
+  val result = ???
+  /*for {
+     players <- playersFut
+     matches <- matchesFut
+   } yield (players, matches)*/
 
   println(Await.result(result, Duration.Inf))
 

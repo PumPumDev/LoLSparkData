@@ -62,7 +62,6 @@ object BasicScalaQueries {
           .filter(_.participantIdentities.map(_.player.get.summonerName.get).contains(pl.summonerName)), pl.summonerName))))
     }
 
-
   private def kdaCalculate(matches: List[MatchDto], sumName: String): Option[Double] =
     matches.flatMap(mat => mat.participants.filter(_.participantId.get == mat.participantIdentities.filter(_.player.get.summonerName.get == sumName).head.participantId.get)
       .map(part => (part.stats.get.kills.get, part.stats.get.deaths.get, part.stats.get.assists.get)))
