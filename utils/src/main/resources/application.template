@@ -8,6 +8,9 @@ riot.api.keys = [apiKey1, apiKey2, apiKey3, apiKey4, apiKey5, ...]
 # The path where data will be locally storage
 riot.data.output.path = api_data
 
+# Set if you want to print the API statistics performance at the end of the download
+riot.data.print.statistics = true
+
 # Uris to obtain the data from the API
 riot.api.uri.challenger.player = /lol/league/v4/challengerleagues/by-queue/RANKED_SOLO_5x5
 riot.api.uri.challenger.summoner = /lol/summoner/v4/summoners/

@@ -1,62 +1,63 @@
 package utils
 
+import java.util.NoSuchElementException
+
+import akka.NotUsed
 import akka.actor.ActorSystem
 import akka.http.scaladsl.model.headers.RawHeader
 import akka.http.scaladsl.model.{HttpResponse, Uri}
-import akka.stream.IOResult
-import akka.stream.scaladsl.{Keep, Sink, Source}
+import akka.stream.scaladsl.{Flow, Sink, Source}
+import akka.stream.{Attributes, Materializer}
 import akka.util.ByteString
 import com.typesafe.scalalogging.Logger
-import utils.FilesManagement._
-import utils.StreamComponents.{createRequestRetry, createRequests, sendRequest}
+import utils.StreamComponents.{createRequest, createRequestRetry, sendRequest}
 
-import scala.collection.mutable
+import scala.concurrent.duration
 import scala.concurrent.duration.FiniteDuration
-import scala.concurrent.{ExecutionContext, Future, duration}
 import scala.util.{Success, Try}
 
 object APIManage {
   private val logger = Logger("API Manage")
 
-  private val errorResponseCondition: ((Try[HttpResponse], Uri)) => Boolean = {
-    case (Success(value), _) if value.status.isSuccess() => false
-    case _ => true
+  def getDataFromAPI(host: String, uri: String, headers: List[RawHeader], delay: Int, stats: APIStats)
+                    (implicit as: ActorSystem): Source[ByteString, NotUsed] = {
+
+    createRequest(uri, headers)
+      .log("Request Send Stream").addAttributes(Attributes.logLevels(onElement = Attributes.LogLevels.Debug))
+      .via(sendRequest(host))
+      .log("Response Receive Stream").addAttributes(Attributes.logLevels(onElement = Attributes.LogLevels.Debug))
+      .via(processResponse)
+      .recoverWithRetries(attempts = 1, errorResponse(uri, host, headers, delay))
+      .alsoTo(Sink.fold(stats)((res, el) => res(el))) // Do we need to consume the http response ??
+      .flatMapConcat(poolResponse => toSource(poolResponse).concat(Source.single(ByteString("\n")))) //After each response insert "\n"
   }
 
-  def getDataFromAPI(host: String, uris: List[String], outputPath: String, headers: List[RawHeader])
-                    (implicit as: ActorSystem, ex: ExecutionContext): Future[IOResult] = {
-    val errorResponses: mutable.MutableList[Uri] = mutable.MutableList()
-
-    //Lanzamos las peticiones
-    createRequests(uris, headers).throttle(headers.length * 100, FiniteDuration(3, duration.MINUTES) + FiniteDuration(1, duration.SECONDS))
-      .via(sendRequest(host)).divertTo(Sink.foreach(elem => {
-      elem._1.getOrElse(HttpResponse()).discardEntityBytes()
-      logger.warn(s"Elem failed on 1st try to $host: $elem")
-      errorResponses += elem._2
-    }), errorResponseCondition)
-      .flatMapConcat(poolResponse => poolResponse._1.get.entity.dataBytes.concat(Source.single(ByteString("\n")))) //After each response insert "\n"
-      .toMat(writeData(outputPath))(Keep.right).run().transformWith(result => {
-      logger.info(s"First Request result of $host: $result")
-      errorResponseHandler(errorResponses.toList, host, outputPath, headers)
-    })
+  private def errorResponse(errorUri: Uri, host: String, headers: List[RawHeader], delay: Int)
+                           (implicit as: ActorSystem):
+  PartialFunction[Throwable, Source[(Try[HttpResponse], Uri), NotUsed]] = { // There was no error
+    case _: NoSuchElementException => //There was an error
+      logger.warn(s"We are retrying $errorUri in $host...")
+      createRequestRetry(errorUri, headers).initialDelay(FiniteDuration(delay, duration.SECONDS)) //We wait and retry the petition
+        .via(sendRequest(host))
+        .log("Response Retry Receive Stream").addAttributes(Attributes.logLevels(onElement = Attributes.LogLevels.Warning))
   }
 
-  //TODO: Podria añadirse los nuevos resultados a la fuente inicial de HttpResponse??
-  //TODO: Evitar el uso de variables mutables
-  private def errorResponseHandler(errorResponses: List[Uri], host: String, outputPath: String, headers: List[RawHeader])
-                                  (implicit as: ActorSystem, ex: ExecutionContext): Future[IOResult] = {
+  private def processResponse(implicit mat: Materializer): Flow[(Try[HttpResponse], Uri), (Try[HttpResponse], Uri), NotUsed] =
+    Flow.fromFunction {
+      case (Success(value: HttpResponse), uri: Uri) if value.status.isSuccess() => (Success(value), uri)
+      case serverResponse =>
+        serverResponse._1.getOrElse(HttpResponse()).discardEntityBytes()
+        logger.warn(s"The serve response was $serverResponse. The request will be retried")
+        throw new NoSuchElementException("Server response with an error") // There was an error processing the response, we throw an exception
+    }
 
-    createRequestRetry(errorResponses, headers).initialDelay(FiniteDuration(2, duration.MINUTES))
-      .throttle(100 * headers.length, FiniteDuration(2, duration.MINUTES) + FiniteDuration(1, duration.SECONDS))
-      .via(sendRequest(host)).divertTo(Sink.foreach(elem => {
-      elem._1.getOrElse(HttpResponse()).discardEntityBytes()
-      logger.error(s"Elem failed on retry to $host: $elem")
-    }), errorResponseCondition)
-      .flatMapConcat(poolResponse => poolResponse._1.get.entity.dataBytes)
-      .toMat(writeData(outputPath))(Keep.right).run()
-      .transform(result => {
-        logger.info(s"Second Request result of $host: $result")
-        result
-      })
-  }
+  private def toSource(serverResponse: (Try[HttpResponse], Uri))
+                      (implicit materializer: Materializer): Source[ByteString, _] =
+    serverResponse match {
+      case (Success(value), _) if value.status.isSuccess() => value.entity.dataBytes
+      case (Success(value), _) if value.status.isFailure() =>
+        value.discardEntityBytes()
+        HttpResponse().entity.dataBytes
+      case _ => HttpResponse().entity.dataBytes
+    }
 }
