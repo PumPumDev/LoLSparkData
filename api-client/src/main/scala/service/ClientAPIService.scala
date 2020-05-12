@@ -30,12 +30,17 @@ object ClientAPIService {
   private val matchlistAPIStats = APIStats("Match Reference API Stats")
   private val matchAPIStats = APIStats("Match API Stats")
 
-  def updateChallengerData(regions: List[RegionDTO], headers: List[RawHeader], outputPath: String)
-                          (implicit as: ActorSystem): List[RunnableGraph[Future[IOResult]]] = {
-    regions map (reg => updateChallengerMatches(headers, outputPath, reg,
-      updateChallengerMatchReferences(headers, outputPath, reg,
-        updateChallengerSummoners(headers, outputPath, reg,
-          updateChallengerPlayers(headers, outputPath, reg)))).to(Sink.ignore)) // We already write data as collateral action, so we ignore the output
+  def updateChallengerData(regions: Source[RegionDTO, _], headers: List[RawHeader], outputPath: String, parallelism: Int)
+                          (implicit as: ActorSystem): RunnableGraph[Future[_]] = {
+    regions
+      .mapAsyncUnordered(parallelism)(reg =>
+        updateChallengerMatches(headers, outputPath, reg,
+          updateChallengerMatchReferences(headers, outputPath, reg,
+            updateChallengerSummoners(headers, outputPath, reg,
+              updateChallengerPlayers(headers, outputPath, reg))))
+
+      )
+      .toMat(Sink.reduce[IOResult]((i1, i2) => IOResult(i1.count + i2.count)))(Keep.right)
   }
 
   def printAPIStatistics(): Unit = {
@@ -84,7 +89,7 @@ object ClientAPIService {
   }
 
   private def updateChallengerMatches(headers: List[RawHeader], outputPath: String, region: RegionDTO, refSrc: Source[ByteString, _])
-                                     (implicit as: ActorSystem): Source[ByteString, Future[IOResult]] = {
+                                     (implicit as: ActorSystem): Future[IOResult] = {
     //First we delete the old data
     setUpFile(getMatchesPath(outputPath, region))
 
@@ -97,7 +102,7 @@ object ClientAPIService {
       .via(Flow.fromFunction(challengerMatchUri + _.gameId))
       .throttle(100 * headers.length, FiniteDuration(2, duration.MINUTES) + FiniteDuration(1, duration.SECONDS)) // Slowdown to use the API
       .flatMapConcat(uri => getDataFromAPI(getHost(region), uri, headers, 0, matchAPIStats))
-      .alsoToMat(writeData(getMatchesPath(outputPath, region)))(Keep.right) // We write the data locally as a collateral action
+      .toMat(writeData(getMatchesPath(outputPath, region)))(Keep.right).run() // We run the Graph associate to this region
   }
 
   private def wasIdProcessed(id: Long, idsProcessed: mutable.Set[Long]): Boolean = {

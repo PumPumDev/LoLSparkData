@@ -1,13 +1,14 @@
 import akka.actor.ActorSystem
 import akka.http.scaladsl.Http
+import akka.stream.scaladsl.Source
 import com.typesafe.scalalogging.Logger
 import configuration.Configuration._
 import dto.RegionDTO
 import service.ClientAPIService.{printAPIStatistics, updateChallengerData}
 import utils.TimeMeasure
 
+import scala.concurrent.Await
 import scala.concurrent.duration.Duration
-import scala.concurrent.{Await, ExecutionContextExecutor, Future}
 
 object ClientAPIMain extends App {
 
@@ -15,12 +16,11 @@ object ClientAPIMain extends App {
 
   //Implicit variables
   implicit val system: ActorSystem = ActorSystem("API_Client_Actor_System")
-  implicit val executionContext: ExecutionContextExecutor = system.dispatcher
 
   logger.info("Data will be downloaded. This will take some time (01:30 h approx)")
 
 
-  val uniqueFut = Future.sequence(updateChallengerData(RegionDTO.getAllRegions, headers, outputPath).map(_.run()))
+  val uniqueFut = updateChallengerData(Source(RegionDTO.getAllRegions), headers, outputPath, RegionDTO.getAllRegions.size).run()
   val timeExpend = TimeMeasure(
     Await.result(uniqueFut, Duration.Inf)
   )._2

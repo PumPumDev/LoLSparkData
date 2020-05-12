@@ -41,7 +41,7 @@ object StreamComponents {
       .via(Flow.fromFunction(_.right.get.as[T]))
       .divertTo(Sink.foreach((elem: Result[T]) => logger.error(s"There was an error during Json decoding into case class: ${elem.left.get}")), _.isLeft)
       .via(Flow.fromFunction[Result[T], T](_.right.get))
-      .log("Deserializer Stream").addAttributes(Attributes.logLevels(onElement = Attributes.LogLevels.Info))
+      .log("Deserializer Stream").addAttributes(Attributes.logLevels(onElement = Attributes.LogLevels.Debug))
   }
 
   private def getRandomHeader(headers: List[RawHeader]) = headers(Random.nextInt(headers.length))

@@ -47,9 +47,8 @@ The program collect 4 kind of data of each [League of Legends Region](https://de
 ## Logs
 The application will log the following events:
 
-* Starting a region update (Player, Summoner, Match Reference or Match)
-* Finishing a region update (Player, Summoner, Match Reference or Match)
 * The API response was lost or the API responded with an error status
 
-If any petition is responded with an error or get lost, the program retry that petition to the API 1 more time 
-(at the end of the transaction).
+If any petition is responded with an error or get lost, the program retry that petition to the API 1 more time.
+
+**The response of the retry request will be logged too**.
