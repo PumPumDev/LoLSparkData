@@ -23,7 +23,7 @@ object ClientAPIMain extends App {
   val uniqueFut = updateChallengerData(Source(RegionDTO.getAllRegions), headers, outputPath, RegionDTO.getAllRegions.size).run()
   val timeExpend = TimeMeasure(
     Await.result(uniqueFut, Duration.Inf)
-  )._2
+  )
 
   if (printApiStats) {
     printAPIStatistics()

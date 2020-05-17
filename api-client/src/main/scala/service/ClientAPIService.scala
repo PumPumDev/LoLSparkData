@@ -1,6 +1,6 @@
 package service
 
-import akka.NotUsed
+import akka.{Done, NotUsed}
 import akka.actor.ActorSystem
 import akka.http.scaladsl.model.headers.RawHeader
 import akka.stream.IOResult
@@ -10,8 +10,8 @@ import configuration.Configuration._
 import dto.RegionDTO
 import dto.`match`.MatchlistDto
 import dto.player.{LeagueListDTO, SummonerDTO}
-import io.circe.generic.auto._
 import paths.ModelDataPaths._
+import io.circe.generic.auto._
 import utils.APIManage._
 import utils.APIStats
 import utils.FilesManagement._
@@ -31,16 +31,16 @@ object ClientAPIService {
   private val matchAPIStats = APIStats("Match API Stats")
 
   def updateChallengerData(regions: Source[RegionDTO, _], headers: List[RawHeader], outputPath: String, parallelism: Int)
-                          (implicit as: ActorSystem): RunnableGraph[Future[_]] = {
+                          (implicit as: ActorSystem): RunnableGraph[Future[Done]] = {
     regions
-      .mapAsyncUnordered(parallelism)(reg =>
+      .flatMapMerge[ByteString,Future[IOResult]](parallelism, reg =>
         updateChallengerMatches(headers, outputPath, reg,
           updateChallengerMatchReferences(headers, outputPath, reg,
             updateChallengerSummoners(headers, outputPath, reg,
               updateChallengerPlayers(headers, outputPath, reg))))
 
       )
-      .toMat(Sink.reduce[IOResult]((i1, i2) => IOResult(i1.count + i2.count)))(Keep.right)
+      .toMat(Sink.ignore)(Keep.right)
   }
 
   def printAPIStatistics(): Unit = {
@@ -89,7 +89,7 @@ object ClientAPIService {
   }
 
   private def updateChallengerMatches(headers: List[RawHeader], outputPath: String, region: RegionDTO, refSrc: Source[ByteString, _])
-                                     (implicit as: ActorSystem): Future[IOResult] = {
+                                     (implicit as: ActorSystem):Source[ByteString, Future[IOResult]] = {
     //First we delete the old data
     setUpFile(getMatchesPath(outputPath, region))
 
@@ -102,7 +102,7 @@ object ClientAPIService {
       .via(Flow.fromFunction(challengerMatchUri + _.gameId))
       .throttle(100 * headers.length, FiniteDuration(2, duration.MINUTES) + FiniteDuration(1, duration.SECONDS)) // Slowdown to use the API
       .flatMapConcat(uri => getDataFromAPI(getHost(region), uri, headers, 0, matchAPIStats))
-      .toMat(writeData(getMatchesPath(outputPath, region)))(Keep.right).run() // We run the Graph associate to this region
+      .alsoToMat(writeData(getMatchesPath(outputPath, region)))(Keep.right) // We run the Graph associate to this region
   }
 
   private def wasIdProcessed(id: Long, idsProcessed: mutable.Set[Long]): Boolean = {
