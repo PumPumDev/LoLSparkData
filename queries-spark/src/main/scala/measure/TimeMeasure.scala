@@ -1,4 +1,4 @@
-package utils
+package measure
 
 object TimeMeasure {
   def apply[T](f: => T): Long = {

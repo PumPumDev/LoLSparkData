@@ -1,4 +1,3 @@
-import configuration.Configuration._
 import dto.RegionDTO
 import dto.`match`.MatchDto
 import dto.player.LeagueListDTO
@@ -7,42 +6,60 @@ import org.apache.spark.sql.functions._
 import org.apache.spark.sql.{DataFrame, Encoders, SparkSession}
 import paths.ModelDataPaths.{getMatchesPath, getPlayerPath}
 import queries.BasicSparkQueries._
-import utils.TimeMeasure
+import measure.TimeMeasure
+import queries.{CompareQueries, CompareQueriesResult}
 
 object SparkQueriesMain extends App {
 
   //WIP
-  val spark: SparkSession = SparkSession.builder().appName("Spark Queries")
+  implicit val spark: SparkSession = SparkSession.builder().appName("Spark Queries")
+    //.config("spark.network.timeout", "600s")
     .master("local[*]").getOrCreate()
   import spark.implicits._
 
   //Download the constant info champions, etc...??
 
-  val parquetPath: String = s"$outputPath/parquet"
+  val parquetPath: String = "s3://league-data/parquet"
 
-  val playersData: DataFrame = RegionDTO.getAllRegions.map(reg => spark.read.format("json")
-    .option("sep", "\n").schema(Encoders.product[LeagueListDTO].schema).load(getPlayerPath(outputPath, reg))
+  val playersDF: DataFrame = RegionDTO.getAllRegions.map(reg => spark.read.format("json")
+    .option("sep", "\n").schema(Encoders.product[LeagueListDTO].schema).load(getPlayerPath("s3://league-data", reg))
     .withColumn("region", lit(reg.toString)).select($"region", explode($"entries"))
     .select($"region", $"col.*")).reduce[DataFrame](_.union(_))
 
-  val matchesData: DataFrame = RegionDTO.getAllRegions.map(reg => spark.read.format("json")
-    .option("sep", "\n").schema(Encoders.product[MatchDto].schema).load(getMatchesPath(outputPath, reg))
+  val matchesDF: DataFrame = RegionDTO.getAllRegions.map(reg => spark.read.format("json")
+    .option("sep", "\n").schema(Encoders.product[MatchDto].schema).load(getMatchesPath("s3://league-data", reg))
     .withColumn("region", lit(reg.toString))).reduce[DataFrame](_.union(_))
 
+  val playerStatsDF = playerStats(playersDF, allStats(matchesDF))
 
-  val playerStatsDF = playerStats(spark, playersData, allStats(spark, matchesData))
+  val optimizedPlayersDF = ParquetOptimization(playersDF, s"$parquetPath/players")
 
-  val optimizedPlayers = ParquetOptimization(spark, playersData, s"$parquetPath/players")
+  val optimizedMatchesDF = ParquetOptimization(matchesDF, s"$parquetPath/matches")
 
-  val optimizedMatches = ParquetOptimization(spark, matchesData, s"$parquetPath/matches")
+  val optimizedPlayerStatsDF = ParquetOptimization(playerStatsDF, s"$parquetPath/player_stats")
 
-  val optimizedPlayerStats = ParquetOptimization(spark, playerStatsDF, s"$parquetPath/player_stats")
+  // Compare optimized and non optimized DataFrames at performing operation
+  def compareDS(compQ: CompareQueries)
+  : CompareQueriesResult = {
+    val nonOptTime = TimeMeasure(compQ.function(compQ.nonOptDF).limit(20).collect()) / 1E9
+    val optTime = TimeMeasure(compQ.function(compQ.optDF).limit(20).collect()) / 1E9
+    CompareQueriesResult(compQ.funName, nonOptTime, optTime)
+  }
 
-  println("Non optimized players " + TimeMeasure(playersData show)._2 / 1E9)
+  val comparableQueries: List[CompareQueries] =
+    List(CompareQueries(rankingPlayers, playersDF, optimizedPlayersDF, "Players Ranking"),
+      CompareQueries(totalMatchesPerPlayer, playersDF, optimizedPlayersDF, "Total Matches per Player"),
+      CompareQueries(winRatePerPlayer, playersDF, optimizedPlayersDF, "Win Rate per Player"),
+      CompareQueries(rankedClassicGames, matchesDF, optimizedMatchesDF, "Ranked Classic Games"),
+      CompareQueries(visionScorePerPlayer, matchesDF, optimizedMatchesDF, "Vision Score per Player"),
+      CompareQueries(firstBloodParticipant, playerStatsDF, optimizedPlayerStatsDF, "First Blood Participant"))
 
-  println("Optimized players " + TimeMeasure(optimizedPlayers show)._2 / 1E9)
+  println(comparableQueries.map(compareDS))
+
+  // Response questions about data
+  val firstBloodParticipantDF: DataFrame = firstBloodParticipant(optimizedPlayerStatsDF)
 
 
-  // Use the queries and see the performance with TimeMeasure object
+  spark.stop()
 
 }
