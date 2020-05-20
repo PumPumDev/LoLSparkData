@@ -1,5 +1,4 @@
 
-
 //Common settings
 lazy val commonSettings = Seq(
   target := {
@@ -13,7 +12,7 @@ lazy val commonSettings = Seq(
   libraryDependencies += "com.typesafe.scala-logging" %% "scala-logging" % "3.9.2",
   libraryDependencies += "ch.qos.logback" % "logback-classic" % "1.2.3",
 
-  version := "1.2"
+    version := "1.2"
 )
 
 lazy val models = project

@@ -13,7 +13,6 @@ object SparkQueriesMain extends App {
 
   //WIP
   implicit val spark: SparkSession = SparkSession.builder().appName("Spark Queries")
-    //.config("spark.network.timeout", "600s")
     .master("local[*]").getOrCreate()
   import spark.implicits._
 
