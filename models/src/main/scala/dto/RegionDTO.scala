@@ -25,5 +25,5 @@ case object la1 extends RegionDTO
 case object la2 extends RegionDTO
 
 object RegionDTO {
-  def getAllRegions: List[RegionDTO] = List(ru, br1, eun1, euw1, jp1, kr, la1, la2, na1, oc1, tr1)
+  val  getAllRegions: List[RegionDTO] = List(ru, br1, eun1, euw1, jp1, kr, la1, la2, na1, oc1, tr1)
 }
