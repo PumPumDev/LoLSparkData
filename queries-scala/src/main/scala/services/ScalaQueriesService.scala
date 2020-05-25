@@ -12,8 +12,8 @@ object ScalaQueriesService {
   private val MAX_ELEMS: Integer = 100
 
   //TODO: Uso iterators
-  def getChallengerPlayers(outputPath: String)(implicit mat: Materializer, ex: ExecutionContext) = ???
+  //def getChallengerPlayers(outputPath: String)(implicit mat: Materializer, ex: ExecutionContext) = ???
 
 
-  def getChallengerMatches(outputPath: String)(implicit mat: Materializer, ex: ExecutionContext) = ???
+  //def getChallengerMatches(outputPath: String)(implicit mat: Materializer, ex: ExecutionContext) = ???
 }

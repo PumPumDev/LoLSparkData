@@ -1,4 +1,4 @@
 package dto.`match`
 
-case class MatchlistDto(matches: List[MatchReferenceDto], totalGames: Int,
+case class MatchlistDTO(matches: List[MatchReferenceDTO], totalGames: Int,
                         startIndex: Int, endIndex: Int)

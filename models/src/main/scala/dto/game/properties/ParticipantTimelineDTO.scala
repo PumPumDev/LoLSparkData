@@ -1,6 +1,6 @@
 package dto.game.properties
 
-case class ParticipantTimelineDto(lane: Option[String], participantId: Option[Int], csDiffPerMinDeltas: Option[Map[String, Double]], goldPerMinDeltas: Option[Map[String, Double]],
+case class ParticipantTimelineDTO(lane: Option[String], participantId: Option[Int], csDiffPerMinDeltas: Option[Map[String, Double]], goldPerMinDeltas: Option[Map[String, Double]],
                                   xpDiffPerMinDeltas: Option[Map[String, Double]], creepsPerMinDeltas: Option[Map[String, Double]],
                                   xpPerMinDeltas: Option[Map[String, Double]], role: Option[String], damageTakenDiffPerMinDeltas: Option[Map[String, Double]],
                                   damageTakenPerMinDeltas: Option[Map[String, Double]])

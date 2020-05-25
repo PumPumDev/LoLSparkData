@@ -1,6 +1,6 @@
 package dto.`match`
 
-case class ParticipantStatsDto(firstBloodAssist: Option[Boolean], visionScore: Option[Long], kills: Option[Int],
+case class ParticipantStatsDTO(firstBloodAssist: Option[Boolean], visionScore: Option[Long], kills: Option[Int],
                                neutralMinionsKilled: Option[Int], damageDealtToTurrets: Option[Int],
                                largestKillingSpree: Option[Int],
                                assists: Option[Int], combatPlayerScore: Option[Int],

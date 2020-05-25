@@ -1,5 +1,5 @@
 import dto.RegionDTO
-import dto.`match`.MatchDto
+import dto.`match`.MatchDTO
 import dto.player.LeagueListDTO
 import optimization.ParquetOptimization
 import org.apache.spark.sql.functions._
@@ -26,7 +26,7 @@ object SparkQueriesMain extends App {
     .select($"region", $"col.*")).reduce[DataFrame](_.union(_))
 
   val matchesDF: DataFrame = RegionDTO.getAllRegions.map(reg => spark.read.format("json")
-    .option("sep", "\n").schema(Encoders.product[MatchDto].schema).load(getMatchesPath("s3://league-data", reg))
+    .option("sep", "\n").schema(Encoders.product[MatchDTO].schema).load(getMatchesPath("s3://league-data", reg))
     .withColumn("region", lit(reg.toString))).reduce[DataFrame](_.union(_))
 
   val playerStatsDF = playerStats(playersDF, allStats(matchesDF))

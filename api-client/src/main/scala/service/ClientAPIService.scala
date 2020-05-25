@@ -8,7 +8,7 @@ import akka.stream.scaladsl.{Flow, Keep, RunnableGraph, Sink, Source}
 import akka.util.ByteString
 import configuration.Configuration._
 import dto.RegionDTO
-import dto.`match`.MatchlistDto
+import dto.`match`.MatchlistDTO
 import dto.player.{LeagueListDTO, SummonerDTO}
 import paths.ModelDataPaths._
 import io.circe.generic.auto._
@@ -96,7 +96,7 @@ object ClientAPIService {
     //TODO: Make a more declarative solution
     val idsProcessed: mutable.Set[Long] = mutable.Set()
 
-    deserializeData[MatchlistDto](refSrc)
+    deserializeData[MatchlistDTO](refSrc)
       .flatMapConcat(matchList => Source(matchList.matches))
       .filterNot(matchRef => wasIdProcessed(matchRef.gameId, idsProcessed))
       .via(Flow.fromFunction(challengerMatchUri + _.gameId))
