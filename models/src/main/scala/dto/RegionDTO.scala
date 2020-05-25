@@ -2,50 +2,28 @@ package dto
 
 sealed abstract class RegionDTO
 
-case object RU extends RegionDTO {
-  override def toString: String = "ru"
-}
+case object ru extends RegionDTO
 
-case object KR extends RegionDTO {
-  override def toString: String = "kr"
-}
+case object kr extends RegionDTO
 
-case object BR extends RegionDTO {
-  override def toString: String = "br1"
-}
+case object br1 extends RegionDTO
 
-case object OC extends RegionDTO {
-  override def toString: String = "oc1"
-}
+case object oc1 extends RegionDTO
 
-case object JP extends RegionDTO {
-  override def toString: String = "jp1"
-}
+case object jp1 extends RegionDTO
 
-case object NA extends RegionDTO {
-  override def toString: String = "na1"
-}
+case object na1 extends RegionDTO
 
-case object EUN extends RegionDTO {
-  override def toString: String = "eun1"
-}
+case object eun1 extends RegionDTO
 
-case object EUW extends RegionDTO {
-  override def toString: String = "euw1"
-}
+case object euw1 extends RegionDTO
 
-case object TR extends RegionDTO {
-  override def toString: String = "tr1"
-}
+case object tr1 extends RegionDTO
 
-case object LA1 extends RegionDTO {
-  override def toString: String = "la1"
-}
+case object la1 extends RegionDTO
 
-case object LA2 extends RegionDTO {
-  override def toString: String = "la2"
-}
+case object la2 extends RegionDTO
 
 object RegionDTO {
-  def getAllRegions: List[RegionDTO] = List(RU, BR, EUN, EUW, JP, KR, LA1, LA2, NA, OC, TR)
+  def getAllRegions: List[RegionDTO] = List(ru, br1, eun1, euw1, jp1, kr, la1, la2, na1, oc1, tr1)
 }
