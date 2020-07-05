@@ -56,7 +56,7 @@ object ClientAPIService {
     setUpFile(getPlayerPath(outputPath, region))
 
     //Now we start making petitions to the API
-    getDataFromAPI(getHost(region), challengerPlayerUri, List(headers.head), 30, playerAPIStats)
+    getDataFromAPI(getHost(region), challengerPlayerUri, List(headers.head), 100, playerAPIStats)
       .alsoTo(writeData(getPlayerPath(outputPath, region))) // We write the data locally as a collateral action
   }
 
@@ -70,7 +70,7 @@ object ClientAPIService {
     deserializeData[LeagueListDTO](playerSrc)
       .flatMapConcat(league => Source(league.entries.map(challengerSummonerUri + _.summonerId)))
       .throttle(100, FiniteDuration(3, duration.MINUTES) + FiniteDuration(1, duration.SECONDS)) // Slowdown to use the API
-      .flatMapConcat(uri => getDataFromAPI(getHost(region), uri, List(headers.head), 30, summonerAPIStats))
+      .flatMapConcat(uri => getDataFromAPI(getHost(region), uri, List(headers.head), 100, summonerAPIStats))
       .alsoTo(writeData(getSummonerPath(outputPath, region))) // We write the data locally as a collateral action
   }
 
@@ -83,7 +83,7 @@ object ClientAPIService {
     deserializeData[SummonerDTO](sumSrc)
       .via(Flow.fromFunction(summoner => challengerMatchlistUri + summoner.accountId))
       .throttle(100, FiniteDuration(3, duration.MINUTES) + FiniteDuration(1, duration.SECONDS)) // Slowdown to use the API
-      .flatMapConcat(uri => getDataFromAPI(getHost(region), uri, List(headers.head), 30, matchlistAPIStats))
+      .flatMapConcat(uri => getDataFromAPI(getHost(region), uri, List(headers.head), 100, matchlistAPIStats))
       .alsoTo(writeData(getMatchesReferencesPath(outputPath, region))) // We write the data locally as a collateral action
 
   }
