@@ -37,7 +37,10 @@ lazy val utils = project
       "io.circe" %% "circe-core",
       "io.circe" %% "circe-generic",
       "io.circe" %% "circe-parser"
-    ).map(_ % "0.12.3")
+    ).map(_ % "0.12.3"),
+
+    // https://mvnrepository.com/artifact/com.amazonaws/aws-java-sdk-s3
+    libraryDependencies += "com.amazonaws" % "aws-java-sdk-s3" % "1.11.816"
   )
 
 lazy val aClient = (project in file("api-client"))
@@ -47,12 +50,6 @@ lazy val aClient = (project in file("api-client"))
     commonSettings,
   ).dependsOn(utils, models)
 
-// Refactor DTOs out of aClient project (common module)
-lazy val qScala = (project in file("queries-scala"))
-  .settings(
-    name := "Scala Queries",
-    commonSettings
-  ).dependsOn(models, utils)
 
 lazy val qSpark = (project in file("queries-spark"))
   .settings(
@@ -103,5 +100,5 @@ lazy val visualization = (project in file("data-visualization"))
 
 // Root project
 lazy val TfgInf = (project in file("."))
-  .aggregate(utils, models, aClient, qScala, qSpark, visualization)
+  .aggregate(utils, models, aClient, qSpark, visualization)
   .settings(commonSettings)
