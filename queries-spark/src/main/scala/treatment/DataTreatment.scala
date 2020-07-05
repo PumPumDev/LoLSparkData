@@ -3,12 +3,15 @@ package treatment
 
 import java.io.{BufferedWriter, File, FileWriter}
 
+import com.amazonaws.regions.Regions
+import com.amazonaws.services.s3.{AmazonS3, AmazonS3ClientBuilder}
 import dto.RegionDTO
 import io.circe.Encoder
 import org.apache.spark.sql.{Column, DataFrame}
 import com.typesafe.scalalogging.Logger
+
 import scala.reflect.io.Directory
-import configuration.Configuration.dataResultPath
+import configuration.Configuration.{dataResultPath, AWSLaunch}
 
 
 object DataTreatment {
@@ -25,20 +28,28 @@ object DataTreatment {
       reg.toString -> consult.+:(headerAsString)
     }).toMap
 
-     toVisualizationTab(title->info)
+     toVisualizationTab(title->info, AWSLaunch)
   }
 
 
   //TODO: Test AWS write the visualization files
-  private def toVisualizationTab(consultResult: (String, Map[String, Array[String]])): Unit = {
+  private def toVisualizationTab(consultResult: (String, Map[String, Array[String]]), aws: Boolean): Unit = {
     import io.circe.syntax._
 
     val file = new File(s"$dataResultPath/tables/${consultResult._1.replace(" ","_").toLowerCase}.tab")
-    if (!file.exists() && file.getParentFile!=null)
+
+    if (!file.exists() && file.getParentFile != null)
       file.getParentFile.mkdirs()
     val bw = new BufferedWriter(new FileWriter(file))
     bw.write(consultResult.asJson.noSpaces+"\n")
     bw.close()
+
+    //todo: bucket name generic
+    if (aws){
+      val s3: AmazonS3 = AmazonS3ClientBuilder.standard().withRegion(Regions.US_EAST_1).build()
+      s3.putObject(s"league-data/${file.getParentFile.getPath}",file.getName, file)
+    }
+
     log.info(s"Se generado el archivo ${file.getName} correctamente")
    }
 
@@ -54,10 +65,10 @@ object DataTreatment {
       reg.toString -> (xData,yData)
     }).toMap
 
-    toVisualizationGraph[A,B](title -> info, graphsTypes)
+    toVisualizationGraph[A,B](title -> info, graphsTypes, AWSLaunch)
   }
 
-  private def toVisualizationGraph[A, B](dataResult: (String, Map[String, (Seq[A], Seq[B])]), graphsTypes: GraphsTypes)
+  private def toVisualizationGraph[A, B](dataResult: (String, Map[String, (Seq[A], Seq[B])]), graphsTypes: GraphsTypes, aws: Boolean)
                                         (implicit encA: Encoder[A], encB: Encoder[B]): Unit = {
     import io.circe.syntax._
 
@@ -68,6 +79,12 @@ object DataTreatment {
     val bw = new BufferedWriter(new FileWriter(file))
     bw.write(dataResult.asJson.noSpaces+"\n")
     bw.close()
+
+    if (aws) {
+      val s3: AmazonS3 = AmazonS3ClientBuilder.standard().withRegion(Regions.US_EAST_1).build()
+      s3.putObject(s"league-data/${file.getParentFile.getPath}",file.getName, file)
+    }
+
     log.info(s"Se generado el archivo ${file.getName} correctamente")
   }
 

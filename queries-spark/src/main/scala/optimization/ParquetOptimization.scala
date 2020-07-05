@@ -1,7 +1,5 @@
 package optimization
 
-import java.io.File
-
 import org.apache.spark.sql.{DataFrame, SaveMode}
 
 object ParquetOptimization {

@@ -16,8 +16,12 @@ object Configuration {
   // Credentials load
   lazy val headers: List[RawHeader] = getApiHeaders("riot.api.token", "riot.api.keys")
 
+
+  // Launch AWS or locally
+  lazy val AWSLaunch: Boolean = config.getBoolean("launch.aws")
+
   // OutputPath load
-  lazy val outputPath: String = config.getString("riot.data.output.path")
+  lazy val outputPath: String = if (AWSLaunch) config.getString("riot.data.output.path.aws") else config.getString("riot.data.output.path.local")
 
   // OutputPath spark result
   lazy val dataResultPath: String = config.getString("data.visualization.output.path")
