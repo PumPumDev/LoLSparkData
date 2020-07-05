@@ -19,6 +19,9 @@ object Configuration {
   // OutputPath load
   lazy val outputPath: String = config.getString("riot.data.output.path")
 
+  // OutputPath spark result
+  lazy val dataResultPath: String = config.getString("data.visualization.output.path")
+
   // API statistics load
   lazy val printApiStats: Boolean = config.getBoolean("riot.data.print.statistics")
 

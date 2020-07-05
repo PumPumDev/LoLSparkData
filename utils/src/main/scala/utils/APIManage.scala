@@ -28,7 +28,7 @@ object APIManage {
       .log("Response Receive Stream").addAttributes(Attributes.logLevels(onElement = Attributes.LogLevels.Debug))
       .via(processResponse)
       .recoverWithRetries(attempts = 1, errorResponse(uri, host, headers, delay))
-      .alsoTo(Sink.fold(stats)((res, el) => res(el))) // Do we need to consume the http response ??
+      .alsoTo(Sink.fold(stats)((res, el) => res(el)))
       .flatMapConcat(poolResponse => toSource(poolResponse).concat(Source.single(ByteString("\n")))) //After each response insert "\n"
   }
 
