@@ -2,10 +2,11 @@
 
 ## Purpose
 This module purpose is to obtain the data from [Riot Api](https://developer.riotgames.com/apis). If you want to use
-this module you need to configure some settings (there is a configuration file example).
+this module you need to configure some settings (there is a configuration file example in **Utils** module).
 
 ## Usage
-**A configuration file must be supplied.**
+After setting up the configuration file, simply run the main class of the module `ClientAPIMain`. This module needs Internet
+connexion to work.
 
 ### Configuration file
 The file ``utils/src/main/resources/application.template`` is a template about how the configuration file should be.
@@ -49,6 +50,6 @@ The application will log the following events:
 
 * The API response was lost or the API responded with an error status
 
-If any petition is responded with an error or get lost, the program retry that petition to the API 1 more time.
+If any petition is responded with an error or get lost, the program retry that petition to the API one more time.
 
 **The response of the retry request will be logged too**.
