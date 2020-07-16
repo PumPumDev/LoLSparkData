@@ -15,11 +15,11 @@ lazy val commonSettings = Seq(
   version := "1.2"
 )
 
-lazy val models = project
+lazy val models = (project in file ("lol4s/models"))
   .settings(name := "Models",
     commonSettings)
 
-lazy val utils = project
+lazy val utils = (project in file ("lol4s/utils"))
   .settings(
     name := "Utils",
     commonSettings,
@@ -43,7 +43,7 @@ lazy val utils = project
     libraryDependencies += "com.amazonaws" % "aws-java-sdk-s3" % "1.11.816"
   )
 
-lazy val aClient = (project in file("api-client"))
+lazy val aClient = (project in file("lol4s/api-client"))
   .settings(
     name := "Client API",
     assemblyJarName in assembly := "Client_API.jar",
@@ -51,7 +51,7 @@ lazy val aClient = (project in file("api-client"))
   ).dependsOn(utils, models)
 
 
-lazy val qSpark = (project in file("queries-spark"))
+lazy val qSpark = (project in file("lol4s/queries-spark"))
   .settings(
     name := "Spark Queries",
     assemblyJarName in assembly := "Queries_Spark.jar",
@@ -77,7 +77,7 @@ lazy val qSpark = (project in file("queries-spark"))
   .aggregate(models, utils)
   .dependsOn(models, utils)
 
-lazy val visualization = (project in file("data-visualization"))
+lazy val visualization = (project in file("lol4s/data-visualization"))
   .settings(
     name:="Data Visualization",
     assemblyJarName in assembly := "Visualization_Data.jar",
