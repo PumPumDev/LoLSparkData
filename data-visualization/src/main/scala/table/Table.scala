@@ -11,17 +11,14 @@ import scala.scalajs.js.Dictionary
 
 object Table {
 
-  def apply(data: Array[js.Tuple2[String, Dictionary[js.Array[String]]]]): JsDom.TypedTag[Div] =
-    data.foldLeft(div)((d,arr) =>
-    d(
+  def apply(data: js.Tuple2[String, Dictionary[js.Array[String]]]): JsDom.TypedTag[Div] =
       div(
         h2(
           strong(
-            arr._1
+            data._1
           )
-        )
-      ),
-      arr._2.iterator.toList.map{case (st, inf) => div(
+        ),
+      data._2.iterator.toList.map{case (st, inf) => div(
         h3(
           "Región: ",
           strong(
@@ -30,8 +27,7 @@ object Table {
         ),
         createDataTable(inf.map(row => row.substring(1,row.length-1))),
         br
-      )},
-    )
+      )}
     )
 
   private def createDataTable(data: js.Array[String]): JsDom.TypedTag[Table] =

@@ -32,7 +32,6 @@ object DataTreatment {
   }
 
 
-  //TODO: Test AWS write the visualization files
   private def toVisualizationTab(consultResult: (String, Map[String, Array[String]]), aws: Boolean): Unit = {
     import io.circe.syntax._
 
