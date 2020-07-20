@@ -38,5 +38,5 @@ browser and select the `.tab` or `.graph` file you want to see.
     * To generate the `javascript` file you need to run the sbt task: `fastOptJS`. For more information, check 
     [Scala js](https://www.scala-js.org/doc/project/building.html).
     
-####Important
+#### Important
 Before stating, you need to provide a configuration file to the project. Check de `README` in the module **Utils**.
