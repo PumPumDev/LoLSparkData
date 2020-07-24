@@ -1,26 +1,42 @@
 # SparkLoLData
 ## Final Informatic Degree Project
-This is a Spark project which uses League of Legends (LoL) data to explore Spark framework and maybe to get some conclusions about League of Legends game.
+This is a Spark project which uses League of Legends (LoL) data to explore Spark framework and 
+to get some conclusions about League of Legends game.
 
 We will take LoL data from their public [Riot Api](https://developer.riotgames.com/apis).
 
-### Credentials configuration
-You have to enable the `configuration` file, it is in `src/main/resources/credentials.properties.template`.
-Open the file on a text editor.
+### Modules
+The project has 3 main modules and 2 secondary modules.
 
-You have to open the template and set your _Riot API Key_ to `apiKey` property.
+The main modules are:
 
-You can add more properties and use them in the App calling the object `config.getString("YourProperty"")`, but be 
-careful changing the default properties can crash the hole App!!
+    1. Client API
+        Which makes the calls to the API and process the data to storage it locally. 
+        Use it to download the data for first time or update it when you want.
+    2. Spark Queries
+        Which uses the data storaged locally to make some queries using Spark framework 
+        (Dataset and dataframe).
+    3. Visualization Data
+        Which creates differents tables and graphs to visualize the results of the queries.
 
-When you finished, save the file and change the extension to `.properties`.
+The secondary modules are:
 
-### Data
-If you don't want to call the Riot API to take the data you can use the default JSON data. If you want to use it
-you have to unzip the `src/outputData/outputData.zip` into the `src/outputData` folder. After that, the App will load
-the data from those JSON files.
+    4. Models
+        Which modelizes the structure of the data.
+    5. Utils
+        Which contains multiple useful functions used by the whole project. This module also contains the 
+        .conf file (configuration file).
+        
+Each module has its own README.md. Consult it if you need to use it.
 
-The default JSON data is updated to 01/03/2020.
-
-If you want to use the Riot API to collect your data just don't unzip that folder. It's important to remark that
-it takes more than 10 hours to collect all the data if you have a _Personal Riot API Key_. So good luck! :)
+### Usage
+1. Download the data using the **Client API** module.
+2. Use the module **Spark Queries** to run the queries. The results of queries will be storage locally in `.tab` and 
+`.graph` files.
+3. The module **Visualization Data** have an HTML file with a generated `javascript` file. Open the HTML file in your favourite
+browser and select the `.tab` or `.graph` file you want to see.
+    * To generate the `javascript` file you need to run the sbt task: `fastOptJS`. For more information, check 
+    [Scala js](https://www.scala-js.org/doc/project/building.html).
+    
+#### Important
+Before stating, you need to provide a configuration file to the project. Check de `README` in the module **Utils**.
