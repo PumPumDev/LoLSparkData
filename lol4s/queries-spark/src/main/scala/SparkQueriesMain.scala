@@ -10,13 +10,19 @@ import queries.BasicSparkQueries._
 import queries.CompareQueries
 import treatment.DataTreatment._
 import treatment._
+import configuration.Configuration.AWSLaunch
 
 object SparkQueriesMain extends App {
 
   //WIP
-  implicit val spark: SparkSession = SparkSession.builder().appName("Spark Queries")
-    .master("local[*]")
+  implicit val spark: SparkSession =
+    if (AWSLaunch) SparkSession.builder().appName("Spark Queries")
     .getOrCreate()
+    else
+      SparkSession.builder().appName("Spark Queries")
+        .master("local[*]")
+        .getOrCreate()
+
   import spark.implicits._
 
   //Download the constant info champions, etc...??
