@@ -39,4 +39,4 @@ browser and select the `.tab` or `.graph` file you want to see.
     [Scala js](https://www.scala-js.org/doc/project/building.html).
     
 #### Important
-Before stating, you need to provide a configuration file to the project. Check de `README` in the module **Utils**.
+Before starting, you need to provide a configuration file to the project. Check de `README` in the module **Utils**.
