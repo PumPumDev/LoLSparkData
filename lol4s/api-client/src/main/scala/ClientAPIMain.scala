@@ -20,7 +20,7 @@ object ClientAPIMain extends App {
   logger.info("Data will be downloaded. This will take some time (01:30 h approx)")
 
 
-  val uniqueFut = updateChallengerData(Source(RegionDTO.getAllRegions), headers, outputPath, RegionDTO.getAllRegions.size).run()
+  val uniqueFut = updateChallengerData(Source(RegionDTO.getAllRegions), headers, outputPathStoreData, RegionDTO.getAllRegions.size).run()
   val timeExpend = TimeMeasure(
     Await.result(uniqueFut, Duration.Inf)
   )

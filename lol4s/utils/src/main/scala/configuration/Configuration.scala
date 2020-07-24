@@ -20,6 +20,9 @@ object Configuration {
   // Launch AWS or locally
   lazy val AWSLaunch: Boolean = config.getBoolean("launch.aws")
 
+  //Output store data
+  lazy val outputPathStoreData = config.getString("riot.data.output.path.local")
+
   // OutputPath load
   lazy val outputPath: String = if (AWSLaunch) config.getString("riot.data.output.path.aws") else config.getString("riot.data.output.path.local")
 
