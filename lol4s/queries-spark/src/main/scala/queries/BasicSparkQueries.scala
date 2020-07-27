@@ -12,21 +12,6 @@ object BasicSparkQueries {
     players select($"*", rank over Window.partitionBy($"region").orderBy($"leaguePoints".desc) alias "top") orderBy($"region".asc, $"leaguePoints".desc)
   }
 
-  /*def topPlayerAveragePoints(players: DataFrame): DataFrame = {
-    import players.sparkSession.implicits._
-    rankingPlayers(players) groupBy $"region" agg avg("leaguePoints") withColumnRenamed("avg(leaguePoints)", "Average Points")
-  }
-
-  def topNPlayer(players: DataFrame, n: Int): DataFrame = {
-    import players.sparkSession.implicits._
-    players select($"*", rank over Window.partitionBy($"region").orderBy($"leaguePoints".desc) alias "top") filter ($"rank" <= n) orderBy($"region".asc, $"leaguePoints".desc)
-  }
-
-  def topNPlayerAveragePoints(players: DataFrame, n: Int): DataFrame = {
-    import players.sparkSession.implicits._
-    topNPlayer(players, n) groupBy $"region" agg avg("leaguePoints") withColumnRenamed("avg(leaguePoints)", "Average Points")
-  }*/
-
   def totalMatchesPerPlayer(players: DataFrame): DataFrame = {
     import players.sparkSession.implicits._
     players withColumn("totalMatches", $"wins" + $"losses")  orderBy($"region".asc, $"totalMatches".desc)
@@ -42,11 +27,6 @@ object BasicSparkQueries {
     players withColumn("winRate", ($"wins" / ($"losses" + $"wins")) * 100) orderBy($"region".asc, $"winRate".desc)
   }
 
-  /*def averageWinRatePerRegion(players: DataFrame): DataFrame = {
-    import players.sparkSession.implicits._
-    winRatePerPlayer(players) groupBy $"region" agg avg($"winRate") withColumnRenamed("avg(winRate)", "Average Win Rate")
-  }*/
-
   // Matches Queries
   def rankedClassicGames(matches: DataFrame): DataFrame = {
     import matches.sparkSession.implicits._
@@ -57,18 +37,6 @@ object BasicSparkQueries {
     import matches.sparkSession.implicits._
     matches groupBy $"region" agg avg($"gameDuration") withColumn("avg(gameDuration)", $"avg(gameDuration)" / 60) withColumnRenamed("avg(gameDuration)", "Average Duration (min)")
   }
-
-  /*
-  def visionScorePerPlayer(matches: DataFrame): DataFrame = {
-    import matches.sparkSession.implicits._
-    matches orderBy $"region" withColumn("visionScore", $"participants.stats.visionScore")
-  }
-
-  def averageVisionScore(matches: DataFrame): DataFrame = {
-    import matches.sparkSession.implicits._
-    val getAverageVision = udf((totalVision: Seq[Long]) => totalVision.sum[Long] / totalVision.size)
-    visionScorePerPlayer(matches) withColumn("Average Vision Score", getAverageVision($"visionScore"))
-  }*/
 
   def allStats(matches: DataFrame): DataFrame = {
     import matches.sparkSession.implicits._

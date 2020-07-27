@@ -1,4 +1,4 @@
-import configuration.Configuration.{outputPathStoreData,outputPath}
+import configuration.Configuration.outputPath
 import dto.RegionDTO
 import dto.`match`.MatchDTO
 import dto.player.LeagueListDTO
@@ -27,7 +27,7 @@ object SparkQueriesMain extends App {
 
   //Download the constant info champions, etc...??
 
-  val parquetPath: String = s"$outputPathStoreData/parquet"
+  val parquetPath: String = s"$outputPath/parquet"
 
   val playersDF: DataFrame = RegionDTO.getAllRegions.map(reg => spark.read.format("json")
     .option("sep", "\n").schema(Encoders.product[LeagueListDTO].schema).load(getPlayerPath(outputPath, reg))
